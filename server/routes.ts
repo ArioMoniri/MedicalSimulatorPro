@@ -8,6 +8,7 @@ import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 export function registerRoutes(app: Express): Server {
+  // Setup authentication first
   setupAuth(app);
 
   // Get available scenarios
@@ -145,7 +146,7 @@ export function registerRoutes(app: Express): Server {
       .where(eq(roomParticipants.roomId, room.id))
       .execute();
 
-    if (participantCount.length >= room.maxParticipants) {
+    if (participantCount.length >= (room.maxParticipants ?? 5)) {
       return res.status(400).send("Room is full");
     }
 
