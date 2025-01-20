@@ -10,10 +10,28 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  token: text("token").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const scenarios = pgTable("scenarios", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  type: text("type").notNull(),
+  content: jsonb("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const rooms = pgTable("rooms", {
   id: serial("id").primaryKey(),
   code: text("code").unique().notNull(),
-  scenarioId: integer("scenario_id").notNull(),
+  scenarioId: integer("scenario_id").references(() => scenarios.id).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   endedAt: timestamp("ended_at"),
   maxParticipants: integer("max_participants").default(4),
@@ -35,33 +53,6 @@ export const roomMessages = pgTable("room_messages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const passwordResetTokens = pgTable("password_reset_tokens", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
-  token: text("token").notNull(),
-  expiresAt: timestamp("expires_at").notNull(),
-  used: boolean("used").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const sessions = pgTable("sessions", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
-  expires: timestamp("expires").notNull(),
-  data: text("data").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const scenarios = pgTable("scenarios", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(),
-  description: text("description").notNull(),
-  type: text("type").notNull(), 
-  difficulty: text("difficulty").notNull(), 
-  content: jsonb("content").notNull(), 
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
 export const userProgress = pgTable("user_progress", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
@@ -71,14 +62,17 @@ export const userProgress = pgTable("user_progress", {
   completedAt: timestamp("completed_at").defaultNow(),
 });
 
+// Schema validation
 export const insertUserSchema = createInsertSchema(users).extend({
   email: z.string().email().refine(
     (email) => email.endsWith("acibadem.edu.tr") || email.endsWith("live.acibadem.edu.tr"),
     { message: "Email must be from acibadem.edu.tr or live.acibadem.edu.tr domain" }
   )
 });
-
 export const selectUserSchema = createSelectSchema(users);
+
+export const insertScenarioSchema = createInsertSchema(scenarios);
+export const selectScenarioSchema = createSelectSchema(scenarios);
 
 export const insertRoomSchema = createInsertSchema(rooms);
 export const selectRoomSchema = createSelectSchema(rooms);
@@ -89,6 +83,10 @@ export const selectRoomMessageSchema = createSelectSchema(roomMessages);
 export const insertRoomParticipantSchema = createInsertSchema(roomParticipants);
 export const selectRoomParticipantSchema = createSelectSchema(roomParticipants);
 
+export const insertUserProgressSchema = createInsertSchema(userProgress);
+export const selectUserProgressSchema = createSelectSchema(userProgress);
+
+// Password reset schemas
 export const passwordResetRequestSchema = z.object({
   email: z.string().email().refine(
     (email) => email.endsWith("acibadem.edu.tr") || email.endsWith("live.acibadem.edu.tr"),
@@ -97,27 +95,20 @@ export const passwordResetRequestSchema = z.object({
 });
 
 export const passwordResetSchema = z.object({
-  token: z.string().min(1, "Reset token is required"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-export const insertScenarioSchema = createInsertSchema(scenarios);
-export const selectScenarioSchema = createSelectSchema(scenarios);
-
-export const insertUserProgressSchema = createInsertSchema(userProgress);
-export const selectUserProgressSchema = createSelectSchema(userProgress);
-
+// Type exports
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type Scenario = typeof scenarios.$inferSelect;
+export type NewScenario = typeof scenarios.$inferInsert;
 export type Room = typeof rooms.$inferSelect;
 export type NewRoom = typeof rooms.$inferInsert;
 export type RoomMessage = typeof roomMessages.$inferSelect;
 export type NewRoomMessage = typeof roomMessages.$inferInsert;
 export type RoomParticipant = typeof roomParticipants.$inferSelect;
 export type NewRoomParticipant = typeof roomParticipants.$inferInsert;
-export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
-export type Session = typeof sessions.$inferSelect;
-export type Scenario = typeof scenarios.$inferSelect;
-export type NewScenario = typeof scenarios.$inferInsert;
 export type UserProgress = typeof userProgress.$inferSelect;
 export type NewUserProgress = typeof userProgress.$inferInsert;

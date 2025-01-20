@@ -23,7 +23,6 @@ export function registerRoutes(app: Express): Server {
             title: "Cardiac Arrest Management",
             description: "Handle a case of sudden cardiac arrest in the emergency department",
             type: "emergency",
-            difficulty: "advanced",
             content: {
               initialState: "Patient presents with sudden collapse",
               objectives: ["Assess vital signs", "Initiate CPR protocol", "Manage cardiac rhythm"],
@@ -34,7 +33,6 @@ export function registerRoutes(app: Express): Server {
             title: "Respiratory Distress",
             description: "Manage acute respiratory distress in an adult patient",
             type: "emergency",
-            difficulty: "intermediate",
             content: {
               initialState: "Patient presents with severe shortness of breath",
               objectives: ["Assess airway", "Check oxygen saturation", "Initiate appropriate oxygen therapy"],
@@ -45,7 +43,6 @@ export function registerRoutes(app: Express): Server {
             title: "Diabetes Initial Consultation",
             description: "Conduct initial consultation for newly diagnosed type 2 diabetes",
             type: "clinical",
-            difficulty: "intermediate",
             content: {
               initialState: "Patient referred for diabetes management",
               objectives: ["Review medical history", "Assess current symptoms", "Develop management plan"],
@@ -56,7 +53,6 @@ export function registerRoutes(app: Express): Server {
             title: "Hypertension Follow-up",
             description: "Conduct follow-up consultation for hypertension management",
             type: "clinical",
-            difficulty: "beginner",
             content: {
               initialState: "Regular follow-up for hypertension",
               objectives: ["Review blood pressure logs", "Assess medication compliance", "Adjust treatment if needed"],
@@ -145,16 +141,18 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Check participant count
-      const [participantCount] = await db.select({ count: roomParticipants.id })
-        .from(roomParticipants)
-        .where(
-          and(
-            eq(roomParticipants.roomId, room.id),
-            eq(roomParticipants.leftAt, null)
-          )
-        );
+      const [{ count }] = await db.select({ 
+        count: db.fn.count(roomParticipants.id).mapWith(Number)
+      })
+      .from(roomParticipants)
+      .where(
+        and(
+          eq(roomParticipants.roomId, room.id),
+          eq(roomParticipants.leftAt, null)
+        )
+      );
 
-      if (participantCount && participantCount.count >= (room.maxParticipants ?? 4)) {
+      if (count >= (room.maxParticipants ?? 4)) {
         return res.status(400).json({ message: "Room is full" });
       }
 
