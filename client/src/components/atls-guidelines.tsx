@@ -35,6 +35,7 @@ export default function ATLSGuidelines() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -119,7 +120,9 @@ export default function ATLSGuidelines() {
         {guidelineMutation.isError && (
           <Alert variant="destructive">
             <AlertDescription>
-              {guidelineMutation.error.message}
+              {guidelineMutation.error instanceof Error
+                ? guidelineMutation.error.message
+                : "Failed to fetch guidelines"}
             </AlertDescription>
           </Alert>
         )}

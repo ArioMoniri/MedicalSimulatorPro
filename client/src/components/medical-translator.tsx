@@ -44,10 +44,12 @@ export default function MedicalTranslator() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
+        credentials: "include",
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        const errorText = await response.text();
+        throw new Error(errorText);
       }
 
       const result = await response.json();
@@ -129,7 +131,9 @@ export default function MedicalTranslator() {
         {translateMutation.isError && (
           <Alert variant="destructive">
             <AlertDescription>
-              {translateMutation.error.message}
+              {translateMutation.error instanceof Error
+                ? translateMutation.error.message
+                : "Failed to translate"}
             </AlertDescription>
           </Alert>
         )}
@@ -137,7 +141,7 @@ export default function MedicalTranslator() {
         {translation && (
           <div className="mt-6 p-4 bg-secondary/50 rounded-lg">
             <h3 className="font-semibold mb-2">Translation Result:</h3>
-            <div className="whitespace-pre-wrap">{translation}</div>
+            <p className="whitespace-pre-wrap">{translation}</p>
           </div>
         )}
       </CardContent>

@@ -6,6 +6,7 @@ import { db } from "@db";
 import { rooms, roomMessages, roomParticipants, scenarios, userProgress } from "@db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { translateMedicalTerm, getATLSGuidelines } from "./services/openai";
 
 export function registerRoutes(app: Express): Server {
   // Setup authentication first
@@ -178,6 +179,40 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Get room messages error:", error);
       res.status(500).json({ message: "Failed to get room messages" });
+    }
+  });
+
+  // Medical Translation API
+  app.post("/api/medical/translate", async (req: Request, res: Response) => {
+    try {
+      const { text, targetLanguage } = req.body;
+
+      if (!text || !targetLanguage) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const translation = await translateMedicalTerm(text, targetLanguage);
+      res.json({ translation });
+    } catch (error) {
+      console.error("Translation error:", error);
+      res.status(500).json({ message: "Failed to translate text" });
+    }
+  });
+
+  // ATLS Guidelines API
+  app.post("/api/medical/guidelines", async (req: Request, res: Response) => {
+    try {
+      const { topic, context } = req.body;
+
+      if (!topic) {
+        return res.status(400).json({ message: "Topic is required" });
+      }
+
+      const guidelines = await getATLSGuidelines(topic, context);
+      res.json({ guidelines });
+    } catch (error) {
+      console.error("Guidelines error:", error);
+      res.status(500).json({ message: "Failed to fetch guidelines" });
     }
   });
 
