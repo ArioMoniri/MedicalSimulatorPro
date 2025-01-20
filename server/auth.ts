@@ -28,10 +28,14 @@ const crypto = {
   },
 };
 
-// extend express user object with our schema
+// Session durations
+const SESSION_DURATION = {
+  STANDARD: 1000 * 60 * 60 * 24, // 24 hours
+  EXTENDED: 1000 * 60 * 60 * 24 * 30, // 30 days
+};
+
 declare global {
   namespace Express {
-    // Use the imported User type directly
     interface User extends Omit<User, keyof User> { }
   }
 }
@@ -42,7 +46,10 @@ export function setupAuth(app: Express) {
     secret: process.env.REPL_ID || "acisimu-2025",
     resave: false,
     saveUninitialized: false,
-    cookie: {},
+    cookie: {
+      maxAge: SESSION_DURATION.STANDARD,
+      secure: app.get("env") === "production",
+    },
     store: new MemoryStore({
       checkPeriod: 86400000, // prune expired entries every 24h
     }),
@@ -50,9 +57,6 @@ export function setupAuth(app: Express) {
 
   if (app.get("env") === "production") {
     app.set("trust proxy", 1);
-    sessionSettings.cookie = {
-      secure: true,
-    };
   }
 
   app.use(session(sessionSettings));
@@ -144,6 +148,7 @@ export function setupAuth(app: Express) {
     }
   });
 
+  // Login endpoint with remember me functionality
   app.post("/api/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: Express.User | false, info: IVerifyOptions) => {
       if (err) {
@@ -152,6 +157,13 @@ export function setupAuth(app: Express) {
 
       if (!user) {
         return res.status(400).send(info.message ?? "Login failed");
+      }
+
+      // Set session expiry based on rememberMe
+      if (req.body.rememberMe) {
+        if (req.session.cookie) {
+          req.session.cookie.maxAge = SESSION_DURATION.EXTENDED;
+        }
       }
 
       req.logIn(user, (err) => {
@@ -181,5 +193,19 @@ export function setupAuth(app: Express) {
       return res.json(req.user);
     }
     res.status(401).send("Not logged in");
+  });
+
+  // Session timeout check middleware
+  app.use((req, res, next) => {
+    if (req.session && req.session.cookie) {
+      const now = Date.now();
+      const expires = req.session.cookie.expires?.getTime() || 0;
+
+      // If session is about to expire in the next hour, extend it
+      if (expires - now < 1000 * 60 * 60) {
+        req.session.touch();
+      }
+    }
+    next();
   });
 }
