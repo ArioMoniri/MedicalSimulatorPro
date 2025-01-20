@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -52,7 +52,25 @@ export const sessions = pgTable("sessions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Schema validation
+export const scenarios = pgTable("scenarios", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  type: text("type").notNull(), 
+  difficulty: text("difficulty").notNull(), 
+  content: jsonb("content").notNull(), 
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const userProgress = pgTable("user_progress", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  scenarioId: integer("scenario_id").references(() => scenarios.id).notNull(),
+  score: integer("score").notNull(),
+  feedback: text("feedback"),
+  completedAt: timestamp("completed_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).extend({
   email: z.string().email().refine(
     (email) => email.endsWith("acibadem.edu.tr") || email.endsWith("live.acibadem.edu.tr"),
@@ -83,7 +101,12 @@ export const passwordResetSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-// Type exports
+export const insertScenarioSchema = createInsertSchema(scenarios);
+export const selectScenarioSchema = createSelectSchema(scenarios);
+
+export const insertUserProgressSchema = createInsertSchema(userProgress);
+export const selectUserProgressSchema = createSelectSchema(userProgress);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Room = typeof rooms.$inferSelect;
@@ -94,3 +117,7 @@ export type RoomParticipant = typeof roomParticipants.$inferSelect;
 export type NewRoomParticipant = typeof roomParticipants.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
+export type Scenario = typeof scenarios.$inferSelect;
+export type NewScenario = typeof scenarios.$inferInsert;
+export type UserProgress = typeof userProgress.$inferSelect;
+export type NewUserProgress = typeof userProgress.$inferInsert;
