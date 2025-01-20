@@ -6,10 +6,45 @@ import { db } from "@db";
 import { scenarios, userProgress, rooms, roomParticipants, roomMessages } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { translateMedicalTerm, getATLSGuidelines, translateRequestSchema, guidelineRequestSchema } from "./services/openai-service";
 
 export function registerRoutes(app: Express): Server {
   // Setup authentication first
   setupAuth(app);
+
+  // Medical Translation endpoint
+  app.post("/api/medical/translate", async (req, res) => {
+    try {
+      const result = translateRequestSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).send(result.error.issues.map(i => i.message).join(", "));
+      }
+
+      const { text, targetLanguage } = result.data;
+      const translation = await translateMedicalTerm(text, targetLanguage);
+      res.json({ translation });
+    } catch (error: any) {
+      console.error("Translation error:", error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // ATLS Guidelines endpoint
+  app.post("/api/medical/guidelines", async (req, res) => {
+    try {
+      const result = guidelineRequestSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).send(result.error.issues.map(i => i.message).join(", "));
+      }
+
+      const { topic, context } = result.data;
+      const guidelines = await getATLSGuidelines(topic, context);
+      res.json({ guidelines });
+    } catch (error: any) {
+      console.error("Guidelines error:", error);
+      res.status(500).send(error.message);
+    }
+  });
 
   // Get available scenarios
   app.get("/api/scenarios", async (req, res) => {

@@ -5,10 +5,10 @@ import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { users, insertUserSchema, passwordResetTokens, passwordResetRequestSchema, passwordResetSchema, type User } from "@db/schema";
+import nodemailer from "nodemailer";
+import { users, insertUserSchema, passwordResetTokens, passwordResetRequestSchema, passwordResetSchema, type User as DbUser } from "@db/schema";
 import { db } from "@db";
 import { eq } from "drizzle-orm";
-import nodemailer from "nodemailer";
 
 const scryptAsync = promisify(scrypt);
 const crypto = {
@@ -41,15 +41,17 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Session durations
 const SESSION_DURATION = {
-  STANDARD: 1000 * 60 * 60 * 24, // 24 hours
-  EXTENDED: 1000 * 60 * 60 * 24 * 30, // 30 days
+  STANDARD: 24 * 60 * 60 * 1000, // 24 hours
+  EXTENDED: 30 * 24 * 60 * 60 * 1000, // 30 days
 };
 
+// Extend express User interface with our schema
+// Exclude password from the User type for security
+type SafeUser = Omit<DbUser, 'password'>;
 declare global {
   namespace Express {
-    interface User extends Omit<User, keyof User> { }
+    interface User extends SafeUser {}
   }
 }
 
@@ -92,21 +94,28 @@ export function setupAuth(app: Express) {
         if (!isMatch) {
           return done(null, false, { message: "Incorrect password." });
         }
-        return done(null, user);
+        // Remove password before returning
+        const { password: _, ...safeUser } = user;
+        return done(null, safeUser);
       } catch (err) {
         return done(err);
       }
     })
   );
 
-  passport.serializeUser((user, done) => {
+  passport.serializeUser((user: Express.User, done) => {
     done(null, user.id);
   });
 
   passport.deserializeUser(async (id: number, done) => {
     try {
       const [user] = await db
-        .select()
+        .select({
+          id: users.id,
+          username: users.username,
+          email: users.email,
+          createdAt: users.createdAt,
+        })
         .from(users)
         .where(eq(users.id, id))
         .limit(1);
@@ -236,7 +245,10 @@ export function setupAuth(app: Express) {
         return res.status(400).send("Username already exists");
       }
 
+      // Hash the password
       const hashedPassword = await crypto.hash(password);
+
+      // Create the new user
       const [newUser] = await db
         .insert(users)
         .values({
@@ -246,13 +258,17 @@ export function setupAuth(app: Express) {
         })
         .returning();
 
-      req.login(newUser, (err) => {
+      // Remove password before sending response
+      const { password: _, ...safeUser } = newUser;
+
+      // Log the user in after registration
+      req.login(safeUser, (err) => {
         if (err) {
           return next(err);
         }
         return res.json({
           message: "Registration successful",
-          user: { id: newUser.id, username: newUser.username, email: newUser.email },
+          user: safeUser,
         });
       });
     } catch (error) {
@@ -284,7 +300,7 @@ export function setupAuth(app: Express) {
 
         return res.json({
           message: "Login successful",
-          user: { id: user.id, username: user.username, email: user.email },
+          user,
         });
       });
     })(req, res, next);
@@ -295,6 +311,7 @@ export function setupAuth(app: Express) {
       if (err) {
         return res.status(500).send("Logout failed");
       }
+
       res.json({ message: "Logout successful" });
     });
   });

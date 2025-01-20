@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle } from "lucide-react";
+import MedicalTranslator from "@/components/medical-translator";
+import ATLSGuidelines from "@/components/atls-guidelines";
 
 export default function ClinicalSim() {
   const { scenarios, progress } = useSimulator();
@@ -60,6 +62,24 @@ export default function ClinicalSim() {
         </Card>
 
         <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Medical Term Translation</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <MedicalTranslator />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>ATLS Guidelines</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ATLSGuidelines />
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Clinical Guidelines</CardTitle>
