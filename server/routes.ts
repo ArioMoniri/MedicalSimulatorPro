@@ -140,19 +140,20 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Room has ended" });
       }
 
-      // Check participant count
-      const [{ count }] = await db.select({ 
-        count: db.fn.count(roomParticipants.id).mapWith(Number)
-      })
-      .from(roomParticipants)
-      .where(
-        and(
-          eq(roomParticipants.roomId, room.id),
-          eq(roomParticipants.leftAt, null)
-        )
-      );
+      // Count active participants
+      const [{ count }] = await db
+        .select({
+          count: db.fn.count()
+        })
+        .from(roomParticipants)
+        .where(
+          and(
+            eq(roomParticipants.roomId, room.id),
+            eq(roomParticipants.leftAt, null)
+          )
+        );
 
-      if (count >= (room.maxParticipants ?? 4)) {
+      if (Number(count) >= (room.maxParticipants ?? 4)) {
         return res.status(400).json({ message: "Room is full" });
       }
 
