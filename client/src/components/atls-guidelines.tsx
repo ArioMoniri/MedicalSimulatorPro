@@ -67,7 +67,12 @@ export default function ATLSGuidelines() {
         throw new Error(await response.text());
       }
 
-      return response.json();
+      const result = await response.json();
+      if (!result?.guidelines?.text || !result?.guidelines?.flowchart?.nodes) {
+        throw new Error("Invalid response format from server");
+      }
+
+      return result.guidelines;
     },
     onSuccess: (data) => {
       setGuidelines(data);
@@ -151,6 +156,12 @@ export default function ATLSGuidelines() {
           </Alert>
         )}
 
+        {guidelineMutation.isPending && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        )}
+
         {guidelines && (
           <div className="mt-6">
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "text" | "mindmap")}>
@@ -170,15 +181,17 @@ export default function ATLSGuidelines() {
 
               <TabsContent value="mindmap" className="mt-4">
                 <div className="h-[500px] border rounded-lg bg-secondary/50">
-                  <ReactFlow
-                    nodes={guidelines.flowchart.nodes}
-                    edges={guidelines.flowchart.edges}
-                    nodeTypes={nodeTypes}
-                    fitView
-                  >
-                    <Background />
-                    <Controls />
-                  </ReactFlow>
+                  {guidelines.flowchart?.nodes && guidelines.flowchart?.edges && (
+                    <ReactFlow
+                      nodes={guidelines.flowchart.nodes}
+                      edges={guidelines.flowchart.edges}
+                      nodeTypes={nodeTypes}
+                      fitView
+                    >
+                      <Background />
+                      <Controls />
+                    </ReactFlow>
+                  )}
                 </div>
               </TabsContent>
             </Tabs>
