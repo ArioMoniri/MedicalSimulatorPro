@@ -2,12 +2,15 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import ReactFlow, { Background, Controls } from 'reactflow';
+import 'reactflow/dist/style.css';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, BookOpen } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 
@@ -18,8 +21,30 @@ const guidelineSchema = z.object({
 
 type GuidelineForm = z.infer<typeof guidelineSchema>;
 
+interface GuidelineResponse {
+  text: string;
+  flowchart: {
+    nodes: any[];
+    edges: any[];
+  };
+}
+
+const nodeTypes = {
+  decision: ({ data }: { data: { label: string } }) => (
+    <div className="p-2 rounded-lg border-2 border-primary bg-background">
+      {data.label}
+    </div>
+  ),
+  action: ({ data }: { data: { label: string } }) => (
+    <div className="p-2 rounded-lg border border-muted-foreground bg-muted">
+      {data.label}
+    </div>
+  ),
+};
+
 export default function ATLSGuidelines() {
-  const [guidelines, setGuidelines] = useState<string | null>(null);
+  const [guidelines, setGuidelines] = useState<GuidelineResponse | null>(null);
+  const [activeTab, setActiveTab] = useState<"text" | "mindmap">("text");
 
   const form = useForm<GuidelineForm>({
     resolver: zodResolver(guidelineSchema),
@@ -42,8 +67,7 @@ export default function ATLSGuidelines() {
         throw new Error(await response.text());
       }
 
-      const result = await response.json();
-      return result.guidelines;
+      return response.json();
     },
     onSuccess: (data) => {
       setGuidelines(data);
@@ -128,11 +152,36 @@ export default function ATLSGuidelines() {
         )}
 
         {guidelines && (
-          <div className="mt-6 p-4 bg-secondary/50 rounded-lg">
-            <h3 className="font-semibold mb-2">ATLS Guidelines:</h3>
-            <div className="whitespace-pre-wrap prose prose-sm max-w-none">
-              {guidelines}
-            </div>
+          <div className="mt-6">
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "text" | "mindmap")}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="text">Text Guidelines</TabsTrigger>
+                <TabsTrigger value="mindmap">Decision Tree</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="text" className="mt-4">
+                <div className="p-4 bg-secondary/50 rounded-lg">
+                  <h3 className="font-semibold mb-2">ATLS Guidelines:</h3>
+                  <div className="prose prose-sm max-w-none">
+                    {guidelines.text}
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="mindmap" className="mt-4">
+                <div className="h-[500px] border rounded-lg bg-secondary/50">
+                  <ReactFlow
+                    nodes={guidelines.flowchart.nodes}
+                    edges={guidelines.flowchart.edges}
+                    nodeTypes={nodeTypes}
+                    fitView
+                  >
+                    <Background />
+                    <Controls />
+                  </ReactFlow>
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
         )}
       </CardContent>

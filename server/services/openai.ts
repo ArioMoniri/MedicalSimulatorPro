@@ -28,14 +28,47 @@ export async function translateMedicalTerm(text: string, targetLanguage: string)
   }
 }
 
-export async function getATLSGuidelines(topic: string, context?: string): Promise<string> {
+interface GuidelineNode {
+  id: string;
+  type: 'default' | 'decision' | 'action';
+  data: { label: string };
+  position: { x: number; y: number };
+}
+
+interface GuidelineEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+}
+
+interface GuidelinesResponse {
+  text: string;
+  flowchart: {
+    nodes: GuidelineNode[];
+    edges: GuidelineEdge[];
+  };
+}
+
+export async function getATLSGuidelines(topic: string, context?: string): Promise<GuidelinesResponse> {
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: "You are an ATLS (Advanced Trauma Life Support) expert. Provide evidence-based guidelines and protocols based on the latest medical standards. Output JSON in format: { 'guidelines': string }"
+          content: `You are an ATLS (Advanced Trauma Life Support) expert. Provide evidence-based guidelines as both text and a decision tree flowchart. Output JSON in format: 
+          {
+            "text": "detailed textual guidelines",
+            "flowchart": {
+              "nodes": [
+                { "id": "string", "type": "default|decision|action", "data": { "label": "string" }, "position": { "x": number, "y": number } }
+              ],
+              "edges": [
+                { "id": "string", "source": "string", "target": "string", "label": "string" }
+              ]
+            }
+          }`
         },
         {
           role: "user",
@@ -46,7 +79,7 @@ export async function getATLSGuidelines(topic: string, context?: string): Promis
     });
 
     const result = JSON.parse(response.choices[0].message.content);
-    return result.guidelines;
+    return result;
   } catch (error) {
     console.error("Guidelines error:", error);
     throw new Error("Failed to fetch ATLS guidelines");
