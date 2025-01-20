@@ -65,7 +65,7 @@ export async function getATLSGuidelines(topic: string, context?: string): Promis
       messages: [
         {
           role: "system",
-          content: `You are an ATLS (Advanced Trauma Life Support) expert. Provide evidence-based guidelines as both text and a decision tree flowchart. Format the response exactly as follows:
+          content: `You are an ATLS (Advanced Trauma Life Support) expert. Provide evidence-based guidelines as both text and a decision tree flowchart. Return your response as a JSON object in the following format:
 {
   "text": "Detailed textual guidelines here...",
   "flowchart": {
@@ -75,8 +75,7 @@ export async function getATLSGuidelines(topic: string, context?: string): Promis
         "type": "default",
         "data": { "label": "Start Assessment" },
         "position": { "x": 0, "y": 0 }
-      },
-      // More nodes...
+      }
     ],
     "edges": [
       {
@@ -84,8 +83,7 @@ export async function getATLSGuidelines(topic: string, context?: string): Promis
         "source": "node1",
         "target": "node2",
         "label": "Yes/No"
-      },
-      // More edges...
+      }
     ]
   }
 }`
