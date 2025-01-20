@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLocation } from "wouter";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Link } from "wouter";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -139,6 +140,12 @@ export default function AuthPage() {
                       </FormItem>
                     )}
                   />
+
+                  <div className="text-sm text-right">
+                    <Link href="/reset-password" className="text-primary hover:underline">
+                      Forgot password?
+                    </Link>
+                  </div>
 
                   <Button type="submit" className="w-full">
                     Login

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import { useUser } from "@/hooks/use-user";
 import AuthPage from "@/pages/auth-page";
+import ResetPassword from "@/pages/reset-password";
 import Home from "@/pages/home";
 import EmergencySim from "@/pages/emergency-sim";
 import ClinicalSim from "@/pages/clinical-sim";
@@ -22,6 +23,11 @@ function Router() {
     );
   }
 
+  // Allow access to reset password pages without authentication
+  if (window.location.pathname.startsWith("/reset-password")) {
+    return <ResetPassword />;
+  }
+
   if (!user) {
     return <AuthPage />;
   }
@@ -34,6 +40,8 @@ function Router() {
           <Route path="/" component={Home} />
           <Route path="/emergency" component={EmergencySim} />
           <Route path="/clinical" component={ClinicalSim} />
+          <Route path="/reset-password" component={ResetPassword} />
+          <Route path="/reset-password/:token" component={ResetPassword} />
           <Route component={NotFound} />
         </Switch>
       </main>

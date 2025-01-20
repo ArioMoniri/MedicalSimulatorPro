@@ -10,6 +10,15 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  token: text("token").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const scenarios = pgTable("scenarios", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -66,9 +75,22 @@ export const selectRoomSchema = createSelectSchema(rooms);
 
 export const selectUserSchema = createSelectSchema(users);
 
+export const passwordResetRequestSchema = z.object({
+  email: z.string().email().refine(
+    (email) => email.endsWith("acibadem.edu.tr") || email.endsWith("live.acibadem.edu.tr"),
+    { message: "Email must be from acibadem.edu.tr or live.acibadem.edu.tr domain" }
+  )
+});
+
+export const passwordResetSchema = z.object({
+  token: z.string().min(1, "Reset token is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Scenario = typeof scenarios.$inferSelect;
 export type UserProgress = typeof userProgress.$inferSelect;
 export type Room = typeof rooms.$inferSelect;
 export type RoomMessage = typeof roomMessages.$inferSelect;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;

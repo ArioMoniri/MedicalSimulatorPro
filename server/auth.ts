@@ -5,9 +5,10 @@ import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { users, insertUserSchema, type User } from "@db/schema";
+import { users, insertUserSchema, passwordResetTokens, passwordResetRequestSchema, passwordResetSchema, type User } from "@db/schema";
 import { db } from "@db";
 import { eq } from "drizzle-orm";
+import nodemailer from "nodemailer";
 
 const scryptAsync = promisify(scrypt);
 const crypto = {
@@ -26,7 +27,19 @@ const crypto = {
     )) as Buffer;
     return timingSafeEqual(hashedPasswordBuf, suppliedPasswordBuf);
   },
+  generateToken: () => randomBytes(32).toString("hex"),
 };
+
+// Email configuration
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || "smtp.gmail.com",
+  port: parseInt(process.env.SMTP_PORT || "587"),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
 // Session durations
 const SESSION_DURATION = {
@@ -103,6 +116,105 @@ export function setupAuth(app: Express) {
     }
   });
 
+  // Password reset request endpoint
+  app.post("/api/reset-password/request", async (req, res) => {
+    try {
+      const result = passwordResetRequestSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).send("Invalid email address");
+      }
+
+      const { email } = result.data;
+
+      // Find user by email
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (!user) {
+        // Don't reveal if email exists
+        return res.json({ message: "If your email is registered, you will receive a password reset link." });
+      }
+
+      // Generate reset token
+      const token = crypto.generateToken();
+      const expiresAt = new Date(Date.now() + 3600000); // 1 hour from now
+
+      // Save token to database
+      await db.insert(passwordResetTokens).values({
+        userId: user.id,
+        token,
+        expiresAt,
+      });
+
+      // Send reset email
+      const resetLink = `${req.protocol}://${req.get("host")}/reset-password/${token}`;
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || "noreply@acibadem.edu.tr",
+        to: email,
+        subject: "Password Reset Request - Acibadem Medical Simulation Platform",
+        html: `
+          <h1>Password Reset Request</h1>
+          <p>A password reset was requested for your account. If you did not make this request, please ignore this email.</p>
+          <p>To reset your password, click the link below (valid for 1 hour):</p>
+          <a href="${resetLink}">${resetLink}</a>
+        `,
+      });
+
+      res.json({ message: "If your email is registered, you will receive a password reset link." });
+    } catch (error) {
+      console.error("Password reset request error:", error);
+      res.status(500).send("An error occurred while processing your request");
+    }
+  });
+
+  // Reset password endpoint
+  app.post("/api/reset-password/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const result = passwordResetSchema.safeParse(req.body);
+
+      if (!result.success) {
+        return res.status(400).send(result.error.issues.map(i => i.message).join(", "));
+      }
+
+      const { password } = result.data;
+
+      // Find valid token
+      const [resetToken] = await db
+        .select()
+        .from(passwordResetTokens)
+        .where(
+          eq(passwordResetTokens.token, token)
+        )
+        .limit(1);
+
+      if (!resetToken || resetToken.used || resetToken.expiresAt < new Date()) {
+        return res.status(400).send("Invalid or expired reset token");
+      }
+
+      // Update password
+      const hashedPassword = await crypto.hash(password);
+      await db
+        .update(users)
+        .set({ password: hashedPassword })
+        .where(eq(users.id, resetToken.userId));
+
+      // Mark token as used
+      await db
+        .update(passwordResetTokens)
+        .set({ used: true })
+        .where(eq(passwordResetTokens.id, resetToken.id));
+
+      res.json({ message: "Password successfully reset" });
+    } catch (error) {
+      console.error("Password reset error:", error);
+      res.status(500).send("An error occurred while resetting your password");
+    }
+  });
+
   app.post("/api/register", async (req, res, next) => {
     try {
       const result = insertUserSchema.safeParse(req.body);
@@ -148,7 +260,6 @@ export function setupAuth(app: Express) {
     }
   });
 
-  // Login endpoint with remember me functionality
   app.post("/api/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: Express.User | false, info: IVerifyOptions) => {
       if (err) {
