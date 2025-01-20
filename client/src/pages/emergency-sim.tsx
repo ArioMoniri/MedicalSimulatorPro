@@ -28,8 +28,9 @@ export default function EmergencySim() {
         <h1 className="text-3xl font-bold tracking-tight">Emergency Medicine Simulator</h1>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2">
+      <div className="space-y-6">
+        {/* Main Simulation Area */}
+        <Card>
           <CardHeader>
             <CardTitle>Active Simulation</CardTitle>
           </CardHeader>
@@ -61,8 +62,9 @@ export default function EmergencySim() {
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-          <Card>
+        {/* ATLS Guidelines Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle>ATLS Guidelines</CardTitle>
             </CardHeader>
@@ -71,6 +73,7 @@ export default function EmergencySim() {
             </CardContent>
           </Card>
 
+          {/* Supplementary Cards */}
           <Card>
             <CardHeader>
               <CardTitle>Medical Term Translation</CardTitle>
@@ -89,7 +92,7 @@ export default function EmergencySim() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle>Your Progress</CardTitle>
             </CardHeader>
