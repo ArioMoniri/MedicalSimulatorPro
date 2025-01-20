@@ -6,7 +6,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle } from "lucide-react";
 import MedicalTranslator from "@/components/medical-translator";
-import ATLSGuidelines from "@/components/atls-guidelines";
 
 export default function ClinicalSim() {
   const { scenarios, progress } = useSimulator();
@@ -25,7 +24,7 @@ export default function ClinicalSim() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Clinical Practice Simulator</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Clinical Practice Simulator</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -73,15 +72,6 @@ export default function ClinicalSim() {
 
           <Card>
             <CardHeader>
-              <CardTitle>ATLS Guidelines</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ATLSGuidelines />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <CardTitle>Clinical Guidelines</CardTitle>
             </CardHeader>
             <CardContent>
@@ -93,7 +83,7 @@ export default function ClinicalSim() {
             <CardHeader>
               <CardTitle>Your Progress</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <div className="space-y-2">
                 {progress?.map(p => {
                   const scenario = scenarios.find(s => s.id === p.scenarioId);

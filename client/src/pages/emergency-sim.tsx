@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle } from "lucide-react";
+import MedicalTranslator from "@/components/medical-translator";
+import ATLSGuidelines from "@/components/atls-guidelines";
 
 export default function EmergencySim() {
   const { scenarios, progress } = useSimulator();
@@ -23,7 +25,7 @@ export default function EmergencySim() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Emergency Medicine Simulator</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Emergency Medicine Simulator</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -60,6 +62,24 @@ export default function EmergencySim() {
         </Card>
 
         <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>ATLS Guidelines</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ATLSGuidelines />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Medical Term Translation</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <MedicalTranslator />
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Educational Resources</CardTitle>

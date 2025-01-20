@@ -20,9 +20,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
 interface Message {
+  id?: number;
   role: "user" | "assistant";
   content: string;
   username?: string;
+  createdAt?: Date;
 }
 
 interface ChatInterfaceProps {
@@ -58,13 +60,15 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     if (roomMessages) {
       setMessages(
         roomMessages.map((msg) => ({
+          id: msg.id,
           role: "user",
           content: msg.content,
-          username: msg.username,
+          createdAt: msg.createdAt,
+          username: user?.id === msg.userId ? user.username : undefined
         }))
       );
     }
-  }, [roomMessages]);
+  }, [roomMessages, user]);
 
   const handleCreateRoom = async () => {
     try {
@@ -122,8 +126,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     if (roomId && isConnected) {
       sendMessage(input);
     } else {
-      // TODO: Connect to OpenAI API
-      // For now, just echo back
       setTimeout(() => {
         setMessages((prev) => [
           ...prev,
@@ -141,7 +143,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // TODO: Implement image upload
     console.log("Image upload:", file);
   };
 
