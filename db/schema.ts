@@ -19,6 +19,31 @@ export const scenarios = pgTable("scenarios", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const rooms = pgTable("rooms", {
+  id: serial("id").primaryKey(),
+  code: text("code").unique().notNull(),
+  scenarioId: integer("scenario_id").references(() => scenarios.id),
+  creatorId: integer("creator_id").references(() => users.id),
+  active: boolean("active").default(true),
+  maxParticipants: integer("max_participants").default(5),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const roomParticipants = pgTable("room_participants", {
+  id: serial("id").primaryKey(),
+  roomId: integer("room_id").references(() => rooms.id),
+  userId: integer("user_id").references(() => users.id),
+  joinedAt: timestamp("joined_at").defaultNow(),
+});
+
+export const roomMessages = pgTable("room_messages", {
+  id: serial("id").primaryKey(),
+  roomId: integer("room_id").references(() => rooms.id),
+  userId: integer("user_id").references(() => users.id),
+  content: text("content").notNull(),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
 export const userProgress = pgTable("user_progress", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id),
@@ -36,9 +61,14 @@ export const insertUserSchema = createInsertSchema(users).extend({
   )
 });
 
+export const insertRoomSchema = createInsertSchema(rooms);
+export const selectRoomSchema = createSelectSchema(rooms);
+
 export const selectUserSchema = createSelectSchema(users);
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Scenario = typeof scenarios.$inferSelect;
 export type UserProgress = typeof userProgress.$inferSelect;
+export type Room = typeof rooms.$inferSelect;
+export type RoomMessage = typeof roomMessages.$inferSelect;
