@@ -28,29 +28,31 @@ export default function EmergencySim() {
         <h1 className="text-3xl font-bold tracking-tight">Emergency Medicine Simulator</h1>
       </div>
 
-      <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Simulation Area */}
-        <Card>
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Active Simulation</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             <Tabs defaultValue={emergencyScenarios[0]?.id.toString()}>
-              <TabsList className="w-full">
-                {emergencyScenarios.map(scenario => (
-                  <TabsTrigger 
-                    key={scenario.id} 
-                    value={scenario.id.toString()}
-                  >
-                    {scenario.title}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+              <div className="px-6 pt-2">
+                <TabsList className="w-full">
+                  {emergencyScenarios.map(scenario => (
+                    <TabsTrigger 
+                      key={scenario.id} 
+                      value={scenario.id.toString()}
+                    >
+                      {scenario.title}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
 
               {emergencyScenarios.map(scenario => (
                 <TabsContent key={scenario.id} value={scenario.id.toString()}>
-                  <div className="space-y-4">
-                    <div className="prose max-w-none">
+                  <div className="space-y-4 p-6">
+                    <div className="prose max-w-none dark:prose-invert">
                       <h3>{scenario.title}</h3>
                       <p>{scenario.description}</p>
                     </div>
@@ -62,18 +64,8 @@ export default function EmergencySim() {
           </CardContent>
         </Card>
 
-        {/* ATLS Guidelines Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>ATLS Guidelines</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ATLSGuidelines />
-            </CardContent>
-          </Card>
-
-          {/* Supplementary Cards */}
+        {/* Sidebar */}
+        <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Medical Term Translation</CardTitle>
@@ -92,7 +84,7 @@ export default function EmergencySim() {
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-2">
+          <Card>
             <CardHeader>
               <CardTitle>Your Progress</CardTitle>
             </CardHeader>
@@ -114,6 +106,16 @@ export default function EmergencySim() {
             </CardContent>
           </Card>
         </div>
+
+        {/* ATLS Guidelines Section - Full Width Below */}
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle>ATLS Guidelines</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ATLSGuidelines />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
