@@ -12,11 +12,13 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import VoiceInput from "./voice-input";
+import TypingIndicator from "./typing-indicator";
 import { useRoom } from "@/hooks/use-room";
 import { useUser } from "@/hooks/use-user";
 import { Send, Upload, Users } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
   id?: number;
@@ -37,6 +39,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const [roomCode, setRoomCode] = useState("");
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
 
   const { user } = useUser();
   const { toast } = useToast();
@@ -48,6 +51,24 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     sendMessage: sendRoomMessage,
     isConnected,
   } = useRoom();
+
+  // Load conversation history
+  useEffect(() => {
+    const savedMessages = localStorage.getItem(`chat_history_${user?.id}_${scenarioId}`);
+    if (savedMessages) {
+      setMessages(JSON.parse(savedMessages));
+    }
+  }, [user?.id, scenarioId]);
+
+  // Save conversation history
+  useEffect(() => {
+    if (user?.id && messages.length > 0) {
+      localStorage.setItem(
+        `chat_history_${user?.id}_${scenarioId}`,
+        JSON.stringify(messages)
+      );
+    }
+  }, [messages, user?.id, scenarioId]);
 
   // Create thread mutation
   const createThreadMutation = useMutation({
@@ -73,6 +94,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
+      setIsTyping(true);
       const response = await fetch("/api/assistant/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -82,19 +104,21 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       return response.json();
     },
     onSuccess: (data) => {
-      const contentParts = data.content.split('---').map(part => part.trim());
+      const contentParts = data.content.split('---').map((part: string) => part.trim());
 
-      contentParts.forEach(part => {
+      contentParts.forEach((part: string) => {
         setMessages(prev => [
           ...prev,
           { 
             role: "assistant", 
-            content: part.replace(/\n/g, '<br />')
+            content: part
           }
         ]);
       });
+      setIsTyping(false);
     },
     onError: (error: Error) => {
+      setIsTyping(false);
       toast({
         variant: "destructive",
         title: "Error",
@@ -254,15 +278,19 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                     {message.username}
                   </div>
                 )}
-                 <div 
-                  className="prose prose-sm max-w-none dark:prose-invert"
-                  dangerouslySetInnerHTML={{ 
-                    __html: message.content 
-                  }} 
-                />
+                <div className="prose prose-sm max-w-none dark:prose-invert">
+                  <ReactMarkdown>{message.content}</ReactMarkdown>
+                </div>
               </div>
             </div>
           ))}
+          {isTyping && (
+            <div className="flex justify-start">
+              <div className="rounded-lg px-4 py-2 bg-muted">
+                <TypingIndicator />
+              </div>
+            </div>
+          )}
         </div>
       </ScrollArea>
 
@@ -292,7 +320,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           <Button 
             size="icon" 
             onClick={handleSend}
-            disabled={sendMessageMutation.isPending}
+            disabled={sendMessageMutation.isPending || isTyping}
           >
             <Send className="h-4 w-4" />
           </Button>

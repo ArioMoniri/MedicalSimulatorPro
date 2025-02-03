@@ -19,19 +19,19 @@ interface Resource {
 const EMERGENCY_RESOURCES: Resource[] = [
   {
     id: "e1",
-    title: "ACLS Guidelines",
-    content: "Advanced Cardiac Life Support protocols and algorithms...",
-    url: "https://cpr.heart.org/en/resuscitation-science/cpr-and-ecc-guidelines"
+    title: "ATLS Guidelines",
+    content: "Guideline",
+    url: "https://atlsquestionbank.com/about/"
   },
   {
     id: "e2",
     title: "Trauma Assessment",
-    content: "Primary and secondary survey steps for trauma patients...",
+    content: "https://atlsquestionbank.com/about/.",
   },
   {
     id: "e3",
     title: "Drug Protocols",
-    content: "Emergency medication dosing and administration guidelines...",
+    content: "https://atlsquestionbank.com/about/.",
   }
 ];
 
@@ -39,17 +39,17 @@ const CLINICAL_RESOURCES: Resource[] = [
   {
     id: "c1",
     title: "Physical Examination",
-    content: "Systematic approach to patient examination...",
+    content: "https://atlsquestionbank.com/about/",
   },
   {
     id: "c2",
     title: "History Taking",
-    content: "Comprehensive guide to medical history taking...",
+    content: "https://atlsquestionbank.com/about/",
   },
   {
     id: "c3",
     title: "Differential Diagnosis",
-    content: "Approach to forming and refining differential diagnoses...",
+    content: "https://atlsquestionbank.com/about/",
   }
 ];
 
