@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { db } from "@db";
 import { rooms, roomMessages, roomParticipants } from "@db/schema";
 import { eq, and } from "drizzle-orm";
-import { nanoid } from "nanoid";
+import { authenticateWebSocket } from "./auth";
 
 interface WebSocketMessage {
   type: "join" | "chat" | "leave";
@@ -17,48 +17,81 @@ interface ConnectedClient extends WebSocket {
   roomId?: number;
   userId?: number;
   username?: string;
+  isAuthenticated?: boolean;
 }
 
 export function setupWebSocket(server: Server) {
-  const wss = new WebSocketServer({ server, path: "/api/ws" });
+  const wss = new WebSocketServer({ 
+    server,
+    path: "/api/ws",
+    verifyClient: async (info, cb) => {
+      // Skip verification for Vite HMR
+      if (info.req.headers['sec-websocket-protocol'] === 'vite-hmr') {
+        return cb(true);
+      }
+
+      const userId = parseInt(info.req.headers['x-user-id'] as string);
+      if (!userId) {
+        return cb(false, 401, 'Unauthorized');
+      }
+
+      const user = await authenticateWebSocket(userId);
+      if (!user) {
+        return cb(false, 401, 'Unauthorized');
+      }
+
+      (info.req as any).user = user;
+      cb(true);
+    }
+  });
+
   const rooms = new Map<number, Set<ConnectedClient>>();
 
-  wss.on("connection", async (ws: ConnectedClient) => {
+  wss.on("connection", async (ws: ConnectedClient, req) => {
+    ws.isAuthenticated = true;
+    const user = (req as any).user;
+    if (user) {
+      ws.userId = user.id;
+      ws.username = user.username;
+    }
+
     ws.on("message", async (data) => {
       try {
+        if (!ws.isAuthenticated) {
+          ws.send(JSON.stringify({ 
+            type: "error", 
+            message: "Unauthorized" 
+          }));
+          return;
+        }
+
         const message: WebSocketMessage = JSON.parse(data.toString());
         console.log("WebSocket message received:", message);
 
         switch (message.type) {
           case "join":
-            if (!message.roomId || !message.userId || !message.username) {
+            if (!message.roomId || !ws.userId || !ws.username) {
               throw new Error("Missing required fields for join");
             }
 
-            // Store client info
             ws.roomId = message.roomId;
-            ws.userId = message.userId;
-            ws.username = message.username;
 
-            // Add client to room
             if (!rooms.has(message.roomId)) {
               rooms.set(message.roomId, new Set());
             }
             rooms.get(message.roomId)!.add(ws);
 
-            // Add participant to database
             await db.insert(roomParticipants).values({
               roomId: message.roomId,
-              userId: message.userId,
+              userId: ws.userId,
               joinedAt: new Date(),
             });
 
-            // Broadcast join message to room
             broadcastToRoom(message.roomId, {
               type: "chat",
-              content: `${message.username} joined the room`,
-              userId: message.userId,
-              username: message.username,
+              content: `${ws.username} joined the room`,
+              userId: ws.userId,
+              username: ws.username,
             });
             break;
 
@@ -67,14 +100,12 @@ export function setupWebSocket(server: Server) {
               throw new Error("Missing required fields for chat");
             }
 
-            // Store message in database
             await db.insert(roomMessages).values({
               roomId: ws.roomId,
               userId: ws.userId,
               content: message.content,
             });
 
-            // Broadcast message to room
             broadcastToRoom(ws.roomId, {
               type: "chat",
               content: message.content,
@@ -106,17 +137,16 @@ export function setupWebSocket(server: Server) {
     if (!roomClients) return;
 
     const messageStr = JSON.stringify(message);
-    for (const client of roomClients) {
+    roomClients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(messageStr);
       }
-    }
+    });
   }
 
   async function handleClientLeave(ws: ConnectedClient) {
     if (!ws.roomId || !ws.userId) return;
 
-    // Remove from room
     const roomClients = rooms.get(ws.roomId);
     if (roomClients) {
       roomClients.delete(ws);
@@ -125,25 +155,27 @@ export function setupWebSocket(server: Server) {
       }
     }
 
-    // Update participant record
-    await db.update(roomParticipants)
-      .set({ leftAt: new Date() })
-      .where(
-        and(
-          eq(roomParticipants.roomId, ws.roomId),
-          eq(roomParticipants.userId, ws.userId),
-          eq(roomParticipants.leftAt, null)
-        )
-      );
+    try {
+      await db.update(roomParticipants)
+        .set({ leftAt: new Date() })
+        .where(
+          and(
+            eq(roomParticipants.roomId, ws.roomId),
+            eq(roomParticipants.userId, ws.userId),
+            eq(roomParticipants.leftAt, null)
+          )
+        );
 
-    // Broadcast leave message
-    if (ws.username) {
-      broadcastToRoom(ws.roomId, {
-        type: "chat",
-        content: `${ws.username} left the room`,
-        userId: ws.userId,
-        username: ws.username,
-      });
+      if (ws.username) {
+        broadcastToRoom(ws.roomId, {
+          type: "chat",
+          content: `${ws.username} left the room`,
+          userId: ws.userId,
+          username: ws.username,
+        });
+      }
+    } catch (error) {
+      console.error("Error updating participant record:", error);
     }
   }
 }

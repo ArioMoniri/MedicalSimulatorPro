@@ -69,9 +69,15 @@ export function useRoom() {
       socket.close();
     }
 
-    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/ws`);
+    const wsUrl = new URL(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/ws`);
+    const ws = new WebSocket(wsUrl.toString(), {
+      headers: {
+        'X-User-ID': userId.toString()
+      }
+    });
 
     ws.onopen = () => {
+      console.log("WebSocket connection established");
       ws.send(JSON.stringify({
         type: "join",
         roomId,
@@ -82,6 +88,7 @@ export function useRoom() {
 
     ws.onmessage = (event) => {
       const message: WebSocketMessage = JSON.parse(event.data);
+      console.log("WebSocket message received:", message);
 
       switch (message.type) {
         case "chat":
@@ -96,6 +103,10 @@ export function useRoom() {
       }
     };
 
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
     setSocket(ws);
 
     return () => {
@@ -106,7 +117,10 @@ export function useRoom() {
 
   // Send message to room
   const sendMessage = useCallback((content: string) => {
-    if (!socket) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      console.error("WebSocket is not connected");
+      return;
+    }
 
     socket.send(JSON.stringify({
       type: "chat",

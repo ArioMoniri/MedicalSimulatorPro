@@ -63,17 +63,14 @@ export function setupAuth(app: Express) {
     saveUninitialized: false,
     cookie: {
       maxAge: SESSION_DURATION.STANDARD,
-      secure: app.get("env") === "production",
+      secure: false, // Set to false for development
     },
     store: new MemoryStore({
       checkPeriod: 86400000, // prune expired entries every 24h
     }),
   };
 
-  if (app.get("env") === "production") {
-    app.set("trust proxy", 1);
-  }
-
+  // Remove production check for now to ensure cookies work
   app.use(session(sessionSettings));
   app.use(passport.initialize());
   app.use(passport.session());

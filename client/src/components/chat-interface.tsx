@@ -199,7 +199,28 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     },
   });
 
-  // Send message mutation
+  // Add new mutation for saving vital signs
+  const saveVitalSignsMutation = useMutation({
+    mutationFn: async (vitals: VitalSigns & { threadId: string }) => {
+      const response = await fetch("/api/vital-signs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: vitals.threadId,
+          heartRate: vitals.hr,
+          systolicBP: vitals.bp?.systolic,
+          diastolicBP: vitals.bp?.diastolic,
+          respiratoryRate: vitals.rr,
+          spo2: vitals.spo2,
+          temperature: vitals.temp,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to save vital signs");
+      return response.json();
+    },
+  });
+
+  // Update the message handler to save vital signs
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       setIsTyping(true);
@@ -213,13 +234,19 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     },
     onSuccess: (data) => {
       const content = data.content;
-      console.log("Received message:", content); // Debug log
+      console.log("Received message:", content);
 
       // Check for vital signs in the message
       const vitals = parseVitalSigns(content);
-      if (vitals) {
-        console.log("Updating vitals from new message:", vitals); // Debug log
-        setLatestVitals(vitals); // Direct update instead of merging
+      if (vitals && threadId) {
+        console.log("Saving vitals:", vitals);
+        setLatestVitals(vitals);
+
+        // Persist vital signs to database
+        saveVitalSignsMutation.mutate({
+          ...vitals,
+          threadId,
+        });
       }
 
       // Add message to chat
@@ -243,6 +270,18 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         description: error.message,
       });
     },
+  });
+  
+  // Add query for loading vital signs history
+  const { data: vitalSignsHistory } = useQuery({
+    queryKey: [`/api/vital-signs/${threadId}`],
+    queryFn: async () => {
+      if (!threadId) return null;
+      const response = await fetch(`/api/vital-signs/${threadId}`);
+      if (!response.ok) throw new Error("Failed to load vital signs history");
+      return response.json();
+    },
+    enabled: !!threadId,
   });
 
   // Start new chat
@@ -268,7 +307,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     setChatHistory(prev => [newChat, ...prev]);
   };
 
-  // Handle loading previous chat
+    // Update handleLoadChat to load vital signs history
   const handleLoadChat = (chatId: string) => {
     setCurrentChatId(chatId);
     const savedChat = localStorage.getItem(`chat_${user?.id}_${scenarioId}_${chatId}`);
@@ -276,21 +315,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       const chatData = JSON.parse(savedChat);
       setMessages(chatData.messages);
       setThreadId(chatData.threadId);
-
-      // Find the latest message containing vital signs
-      const latestVitalsMessage = [...chatData.messages]
-        .reverse()
-        .find(msg => msg.role === "assistant" && msg.content.includes("Vital Signs Monitor:"));
-
-      if (latestVitalsMessage) {
-        const vitals = parseVitalSigns(latestVitalsMessage.content);
-        console.log("Loading vitals from history:", vitals); // Debug log
-        if (vitals) {
-          setLatestVitals(vitals);
-        }
-      } else {
-        setLatestVitals({});
-      }
     }
   };
 

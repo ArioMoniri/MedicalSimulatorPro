@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { setupWebSocket } from "./websocket";
 import { db } from "@db";
-import { rooms, roomMessages, roomParticipants, scenarios, userProgress } from "@db/schema";
+import { rooms, roomMessages, roomParticipants, scenarios, userProgress, vitalSigns } from "@db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { translateMedicalTerm, getATLSGuidelines } from "./services/openai";
@@ -243,6 +243,60 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ message: "Failed to send message" });
     }
   });
+
+    // New Vital Signs API endpoints
+    app.post("/api/vital-signs", async (req: Request, res: Response) => {
+      try {
+        if (!req.user?.id) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+  
+        const { threadId, heartRate, systolicBP, diastolicBP, respiratoryRate, spo2, temperature } = req.body;
+  
+        const [vitalSign] = await db.insert(vitalSigns)
+          .values({
+            threadId,
+            userId: req.user.id,
+            heartRate,
+            systolicBP,
+            diastolicBP,
+            respiratoryRate,
+            spo2,
+            temperature,
+          })
+          .returning();
+  
+        res.json(vitalSign);
+      } catch (error) {
+        console.error("Save vital signs error:", error);
+        res.status(500).json({ message: "Failed to save vital signs" });
+      }
+    });
+  
+    app.get("/api/vital-signs/:threadId", async (req: Request, res: Response) => {
+      try {
+        if (!req.user?.id) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+  
+        const { threadId } = req.params;
+  
+        const history = await db.select()
+          .from(vitalSigns)
+          .where(
+            and(
+              eq(vitalSigns.threadId, threadId),
+              eq(vitalSigns.userId, req.user.id)
+            )
+          )
+          .orderBy(desc(vitalSigns.timestamp));
+  
+        res.json(history);
+      } catch (error) {
+        console.error("Get vital signs error:", error);
+        res.status(500).json({ message: "Failed to get vital signs history" });
+      }
+    });
 
   const httpServer = createServer(app);
   setupWebSocket(httpServer);

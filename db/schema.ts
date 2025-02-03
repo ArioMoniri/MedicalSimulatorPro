@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, real } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -62,6 +62,19 @@ export const userProgress = pgTable("user_progress", {
   completedAt: timestamp("completed_at").defaultNow(),
 });
 
+export const vitalSigns = pgTable("vital_signs", {
+  id: serial("id").primaryKey(),
+  threadId: text("thread_id").notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  timestamp: timestamp("timestamp").defaultNow(),
+  heartRate: integer("heart_rate"),
+  systolicBP: integer("systolic_bp"),
+  diastolicBP: integer("diastolic_bp"),
+  respiratoryRate: integer("respiratory_rate"),
+  spo2: integer("spo2"),
+  temperature: real("temperature"),
+});
+
 // Schema validation
 export const insertUserSchema = createInsertSchema(users).extend({
   email: z.string().email().refine(
@@ -85,6 +98,17 @@ export const selectRoomParticipantSchema = createSelectSchema(roomParticipants);
 
 export const insertUserProgressSchema = createInsertSchema(userProgress);
 export const selectUserProgressSchema = createSelectSchema(userProgress);
+
+export const insertVitalSignsSchema = createInsertSchema(vitalSigns).extend({
+  heartRate: z.number().min(0).max(300),
+  systolicBP: z.number().min(0).max(300),
+  diastolicBP: z.number().min(0).max(300),
+  respiratoryRate: z.number().min(0).max(100),
+  spo2: z.number().min(0).max(100),
+  temperature: z.number().min(20).max(45),
+});
+
+export const selectVitalSignsSchema = createSelectSchema(vitalSigns);
 
 // Password reset schemas
 export const passwordResetRequestSchema = z.object({
@@ -112,3 +136,5 @@ export type RoomParticipant = typeof roomParticipants.$inferSelect;
 export type NewRoomParticipant = typeof roomParticipants.$inferInsert;
 export type UserProgress = typeof userProgress.$inferSelect;
 export type NewUserProgress = typeof userProgress.$inferInsert;
+export type VitalSign = typeof vitalSigns.$inferSelect;
+export type NewVitalSign = typeof vitalSigns.$inferInsert;
