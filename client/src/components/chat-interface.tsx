@@ -24,62 +24,100 @@ import ReactMarkdown from 'react-markdown';
 const parseVitalSigns = (content: string): VitalSigns | null => {
   console.log("Attempting to parse vital signs from:", content);
 
-  // Try to find the "Vital Signs Monitor:" section first
-  const vitalSignsBlockMatch = content.match(/Vital Signs Monitor:\s*([\s\S]*?)(?:\n\n|\n(?=[A-Z])|$)/i);
-  let textToSearch = vitalSignsBlockMatch ? vitalSignsBlockMatch[1] : content;
+  // Try to find vital signs in different formats throughout the text
+  const findValue = (text: string, patterns: string[]): string | null => {
+    for (const pattern of patterns) {
+      const regex = new RegExp(pattern, 'i');
+      const match = text.match(regex);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    return null;
+  };
 
-  // Clean up the text and split into lines
-  const lines = textToSearch.split('\n').map(line => line.trim()).filter(Boolean);
-  console.log("Lines to parse:", lines);
+  // Split content into lines and clean them
+  const lines = content.split(/[\n,]/)
+    .map(line => line.trim())
+    .filter(Boolean);
 
   const vitals: VitalSigns = {};
 
-  // Helper function to find value in a line
-  const findValue = (line: string, key: string): string | null => {
-    const match = line.match(new RegExp(`${key}:?\\s*([\\d./]+)(?:\\s*(?:bpm|mmHg|%|°C|°F|/min))?`, 'i'));
-    return match ? match[1] : null;
-  };
-
-  // Process each line
+  // Process each line for vital signs
   lines.forEach(line => {
-    // Check for HR
-    const hrValue = findValue(line, 'HR|Heart Rate|Pulse');
+    // Heart Rate patterns
+    const hrPatterns = [
+      'HR:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?',
+      'Heart Rate:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?',
+      'Pulse:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?'
+    ];
+    const hrValue = findValue(line, hrPatterns);
     if (hrValue) {
       vitals.hr = parseInt(hrValue);
       console.log("Found HR:", vitals.hr);
     }
 
-    // Check for BP
-    const bpMatch = line.match(/(?:BP|Blood Pressure):?\s*(\d+)\/(\d+)/i);
-    if (bpMatch) {
-      vitals.bp = {
-        systolic: parseInt(bpMatch[1]),
-        diastolic: parseInt(bpMatch[2])
-      };
-      console.log("Found BP:", vitals.bp);
+    // Blood Pressure patterns
+    const bpPatterns = [
+      'BP:?\\s*(\\d+)\\s*/\\s*(\\d+)(?:\\s*(?:mmHg|mm Hg))?',
+      'Blood Pressure:?\\s*(\\d+)\\s*/\\s*(\\d+)(?:\\s*(?:mmHg|mm Hg))?'
+    ];
+    for (const pattern of bpPatterns) {
+      const match = line.match(new RegExp(pattern, 'i'));
+      if (match && match[1] && match[2]) {
+        vitals.bp = {
+          systolic: parseInt(match[1]),
+          diastolic: parseInt(match[2])
+        };
+        console.log("Found BP:", vitals.bp);
+        break;
+      }
     }
 
-    // Check for RR
-    const rrValue = findValue(line, 'RR|Respiratory Rate|Resp');
+    // Respiratory Rate patterns
+    const rrPatterns = [
+      'RR:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?',
+      'Respiratory Rate:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?',
+      'Resp:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?'
+    ];
+    const rrValue = findValue(line, rrPatterns);
     if (rrValue) {
       vitals.rr = parseInt(rrValue);
       console.log("Found RR:", vitals.rr);
     }
 
-    // Check for SpO2
-    const spo2Value = findValue(line, 'SpO2|O2 Sat|Oxygen|SaO2');
+    // SpO2 patterns
+    const spo2Patterns = [
+      'SpO2:?\\s*(\\d+)\\s*%?',
+      'O2 Sat:?\\s*(\\d+)\\s*%?',
+      'Oxygen Saturation:?\\s*(\\d+)\\s*%?',
+      'SaO2:?\\s*(\\d+)\\s*%?'
+    ];
+    const spo2Value = findValue(line, spo2Patterns);
     if (spo2Value) {
       vitals.spo2 = parseInt(spo2Value);
       console.log("Found SpO2:", vitals.spo2);
     }
 
-    // Check for Temp
-    const tempValue = findValue(line, 'Temp|Temperature');
+    // Temperature patterns
+    const tempPatterns = [
+      'Temp:?\\s*(\\d+\\.?\\d*)\\s*[°]?C',
+      'Temperature:?\\s*(\\d+\\.?\\d*)\\s*[°]?C',
+      'Temp:?\\s*(\\d+\\.?\\d*)\\s*[°]?F',
+      'Temperature:?\\s*(\\d+\\.?\\d*)\\s*[°]?F'
+    ];
+    const tempValue = findValue(line, tempPatterns);
     if (tempValue) {
       vitals.temp = parseFloat(tempValue);
       console.log("Found Temp:", vitals.temp);
     }
   });
+
+  // Look for vital signs in the entire text if not found line by line
+  if (Object.keys(vitals).length === 0) {
+    const fullText = content.replace(/\s+/g, ' ');
+    lines.push(fullText);
+  }
 
   console.log("Final parsed vitals:", vitals);
   return Object.keys(vitals).length > 0 ? vitals : null;
@@ -182,7 +220,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       if (history) {
         setChatHistory(JSON.parse(history));
       }
-
+    
       // Load current chat if exists
       const currentId = localStorage.getItem(`current_chat_${user?.id}_${scenarioId}`);
       if (currentId) {

@@ -78,22 +78,37 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // User Progress API
-  app.get("/api/progress", async (req: Request, res: Response) => {
+  app.post("/api/progress", async (req: Request, res: Response) => {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const progress = await db.select()
-        .from(userProgress)
-        .where(eq(userProgress.userId, req.user.id))
-        .orderBy(desc(userProgress.completedAt));
+      const { scenarioId, score, threadId, feedback } = req.body;
+
+      // Validate required fields
+      if (!scenarioId || typeof score !== 'number' || !threadId) {
+        return res.status(400).json({
+          message: "Missing required fields: scenarioId, score, and threadId are required"
+        });
+      }
+
+      // Insert progress
+      const [progress] = await db.insert(userProgress)
+        .values({
+          userId: req.user.id,
+          scenarioId,
+          score,
+          threadId,
+          feedback: feedback || null,
+          completedAt: new Date(),
+        })
+        .returning();
 
       res.json(progress);
-    } catch (error) {
-      console.error("Get progress error:", error);
-      res.status(500).json({ message: "Failed to get progress" });
+    } catch (error: any) {
+      console.error("Update progress error:", error);
+      res.status(500).json({ message: `Failed to update progress: ${error.message}` });
     }
   });
 
