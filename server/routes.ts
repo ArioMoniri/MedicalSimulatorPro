@@ -7,6 +7,7 @@ import { rooms, roomMessages, roomParticipants, scenarios, userProgress } from "
 import { eq, desc, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { translateMedicalTerm, getATLSGuidelines } from "./services/openai";
+import { createThread, sendMessage } from "./services/assistant-service";
 
 export function registerRoutes(app: Express): Server {
   // Setup authentication first
@@ -213,6 +214,33 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Guidelines error:", error);
       res.status(500).json({ message: "Failed to fetch guidelines" });
+    }
+  });
+
+  // Assistant API Routes
+  app.post("/api/assistant/thread", async (_req: Request, res: Response) => {
+    try {
+      const thread = await createThread();
+      res.json(thread);
+    } catch (error) {
+      console.error("Create thread error:", error);
+      res.status(500).json({ message: "Failed to create thread" });
+    }
+  });
+
+  app.post("/api/assistant/message", async (req: Request, res: Response) => {
+    try {
+      const { content, threadId } = req.body;
+
+      if (!content || !threadId) {
+        return res.status(400).json({ message: "Content and threadId are required" });
+      }
+
+      const response = await sendMessage(content, threadId);
+      res.json(response);
+    } catch (error) {
+      console.error("Send message error:", error);
+      res.status(500).json({ message: "Failed to send message" });
     }
   });
 

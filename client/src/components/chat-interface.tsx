@@ -9,14 +9,13 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import VoiceInput from "./voice-input";
 import { useRoom } from "@/hooks/use-room";
 import { useUser } from "@/hooks/use-user";
 import { Send, Upload, Users } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
 interface Message {
@@ -37,6 +36,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const [roomId, setRoomId] = useState<number | null>(null);
   const [roomCode, setRoomCode] = useState("");
   const [showJoinDialog, setShowJoinDialog] = useState(false);
+  const [threadId, setThreadId] = useState<string | null>(null);
 
   const { user } = useUser();
   const { toast } = useToast();
@@ -45,9 +45,63 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     joinRoom,
     getRoomMessages,
     connectToRoom,
-    sendMessage,
+    sendMessage: sendRoomMessage,
     isConnected,
   } = useRoom();
+
+  // Create thread mutation
+  const createThreadMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/assistant/thread", {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("Failed to create thread");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setThreadId(data.id);
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    },
+  });
+
+  // Send message mutation
+  const sendMessageMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const response = await fetch("/api/assistant/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, threadId }),
+      });
+      if (!response.ok) throw new Error("Failed to send message");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: data.content },
+      ]);
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    },
+  });
+
+  // Initialize thread when component mounts
+  useEffect(() => {
+    if (!threadId) {
+      createThreadMutation.mutate();
+    }
+  }, []);
 
   // Fetch room messages if in collaborative mode
   const { data: roomMessages } = useQuery({
@@ -63,8 +117,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           id: msg.id,
           role: "user",
           content: msg.content,
-          createdAt: msg.createdAt,
-          username: user?.id === msg.userId ? user.username : undefined
+          createdAt: new Date(msg.createdAt),
+          username: user?.id === msg.userId ? user.username : undefined,
         }))
       );
     }
@@ -124,14 +178,9 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     setInput("");
 
     if (roomId && isConnected) {
-      sendMessage(input);
-    } else {
-      setTimeout(() => {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: `Response to: ${input}` },
-        ]);
-      }, 1000);
+      sendRoomMessage(input);
+    } else if (threadId) {
+      sendMessageMutation.mutate(input);
     }
   };
 
@@ -228,7 +277,11 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
               onChange={handleImageUpload}
             />
           </Button>
-          <Button size="icon" onClick={handleSend}>
+          <Button 
+            size="icon" 
+            onClick={handleSend}
+            disabled={sendMessageMutation.isPending}
+          >
             <Send className="h-4 w-4" />
           </Button>
         </div>
