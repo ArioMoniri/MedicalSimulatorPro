@@ -145,13 +145,13 @@ export function registerRoutes(app: Express): Server {
       // Count active participants
       const [{ count }] = await db
         .select({
-          count: db.fn.count()
+          count: db.sql<number>`count(*)`
         })
         .from(roomParticipants)
         .where(
           and(
             eq(roomParticipants.roomId, room.id),
-            eq(roomParticipants.leftAt, null)
+            eq(roomParticipants.leftAt, null as unknown as Date)
           )
         );
 

@@ -57,19 +57,44 @@ export default function AuthPage() {
 
   const onSubmit = async (data: LoginFormData | RegisterFormData) => {
     try {
-      const result = await (mode === "login" ? login(data) : register(data));
-      if (!result.ok) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: result.message,
+      if (mode === "login") {
+        const result = await login({
+          username: data.username,
+          password: (data as LoginFormData).password,
+          rememberMe: (data as LoginFormData).rememberMe
         });
+        if (!result.ok) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: result.message,
+          });
+        } else {
+          toast({
+            title: "Success",
+            description: "Login successful",
+          });
+          setLocation("/");
+        }
       } else {
-        toast({
-          title: "Success",
-          description: mode === "login" ? "Login successful" : "Registration successful",
+        const result = await register({
+          username: data.username,
+          email: (data as RegisterFormData).email,
+          password: data.password
         });
-        setLocation("/"); // Redirect to home after successful auth
+        if (!result.ok) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: result.message,
+          });
+        } else {
+          toast({
+            title: "Success",
+            description: "Registration successful",
+          });
+          setLocation("/");
+        }
       }
     } catch (error: any) {
       toast({

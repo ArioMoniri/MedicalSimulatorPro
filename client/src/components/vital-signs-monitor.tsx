@@ -13,6 +13,7 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { motion, AnimatePresence } from 'framer-motion';
 
 ChartJS.register(
   CategoryScale,
@@ -35,6 +36,61 @@ export interface VitalSigns {
 interface VitalSignsMonitorProps {
   latestVitals: VitalSigns;
 }
+
+const HeartBeatPulse = ({ heartRate }: { heartRate?: number }) => {
+  const duration = heartRate ? 60 / heartRate : 1;
+
+  return (
+    <div className="relative h-8 w-8">
+      <motion.div
+        className="absolute inset-0 bg-red-500 rounded-full"
+        animate={{
+          scale: [1, 1.2, 1],
+          opacity: [0.6, 0.8, 0.6],
+        }}
+        transition={{
+          duration,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+    </div>
+  );
+};
+
+const BreathingWave = ({ respiratoryRate }: { respiratoryRate?: number }) => {
+  const duration = respiratoryRate ? 60 / respiratoryRate : 3;
+
+  return (
+    <motion.div
+      className="h-8 w-16 bg-blue-500"
+      animate={{
+        scaleY: [1, 1.5, 1],
+      }}
+      transition={{
+        duration,
+        repeat: Infinity,
+        ease: "easeInOut",
+      }}
+    />
+  );
+};
+
+const SpO2Pulse = ({ value }: { value?: number }) => {
+  return (
+    <motion.div
+      className="h-6 w-6 rounded-full bg-purple-500"
+      animate={{
+        opacity: [0.5, 1, 0.5],
+      }}
+      transition={{
+        duration: 2,
+        repeat: Infinity,
+        ease: "easeInOut",
+      }}
+    />
+  );
+};
 
 export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorProps) {
   const [vitalsHistory, setVitalsHistory] = useState<{
@@ -144,35 +200,61 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="h-[200px]">
-            <Line options={options} data={data} />
+          <div className="space-y-4">
+            {/* Animated Vitals Display */}
+            <div className="grid grid-cols-2 gap-4 p-4 bg-black rounded-lg">
+              <div className="flex items-center space-x-2 text-white">
+                <HeartBeatPulse heartRate={latestVitals.hr} />
+                <span className="font-mono text-xl">{latestVitals.hr || '-'}</span>
+                <span className="text-sm text-gray-400">bpm</span>
+              </div>
+              <div className="flex items-center space-x-2 text-white">
+                <BreathingWave respiratoryRate={latestVitals.rr} />
+                <span className="font-mono text-xl">{latestVitals.rr || '-'}</span>
+                <span className="text-sm text-gray-400">/min</span>
+              </div>
+              <div className="flex items-center space-x-2 text-white">
+                <SpO2Pulse value={latestVitals.spo2} />
+                <span className="font-mono text-xl">{latestVitals.spo2 || '-'}</span>
+                <span className="text-sm text-gray-400">%</span>
+              </div>
+              <div className="flex items-center space-x-2 text-white">
+                <motion.span 
+                  className="font-mono text-xl"
+                  animate={{ opacity: [1, 0.5, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
+                  {latestVitals.bp ? `${latestVitals.bp.systolic}/${latestVitals.bp.diastolic}` : '-'}
+                </motion.span>
+                <span className="text-sm text-gray-400">mmHg</span>
+              </div>
+            </div>
+
+            {/* Charts */}
+            <div className="h-[200px]">
+              <Line options={options} data={data} />
+            </div>
           </div>
-          <div className="h-[200px]">
-            <Line options={options} data={secondaryData} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4 text-sm">
-          <div className="flex justify-between p-2 bg-muted rounded">
-            <span>HR:</span>
-            <span className="font-medium">{latestVitals.hr || '-'} bpm</span>
-          </div>
-          <div className="flex justify-between p-2 bg-muted rounded">
-            <span>BP:</span>
-            <span className="font-medium">
-              {latestVitals.bp ? `${latestVitals.bp.systolic}/${latestVitals.bp.diastolic}` : '-'} mmHg
-            </span>
-          </div>
-          <div className="flex justify-between p-2 bg-muted rounded">
-            <span>RR:</span>
-            <span className="font-medium">{latestVitals.rr || '-'} /min</span>
-          </div>
-          <div className="flex justify-between p-2 bg-muted rounded">
-            <span>SpO₂:</span>
-            <span className="font-medium">{latestVitals.spo2 || '-'}%</span>
-          </div>
-          <div className="flex justify-between p-2 bg-muted rounded">
-            <span>Temp:</span>
-            <span className="font-medium">{latestVitals.temp || '-'}°C</span>
+          <div className="space-y-4">
+            <div className="h-[200px]">
+              <Line options={options} data={secondaryData} />
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="flex justify-between p-2 bg-muted rounded">
+                <span>Temp:</span>
+                <motion.span 
+                  className="font-medium"
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
+                  {latestVitals.temp || '-'}°C
+                </motion.span>
+              </div>
+              <div className="flex justify-between p-2 bg-muted rounded">
+                <span>SpO₂:</span>
+                <span className="font-medium">{latestVitals.spo2 || '-'}%</span>
+              </div>
+            </div>
           </div>
         </div>
       </CardContent>

@@ -337,3 +337,25 @@ export function setupAuth(app: Express) {
     next();
   });
 }
+
+// Adding WebSocket-specific authentication handling
+export function authenticateWebSocket(id: number): Promise<Express.User | null> {
+  return new Promise(async (resolve) => {
+    try {
+      const [user] = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          email: users.email,
+          createdAt: users.createdAt,
+        })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+      resolve(user || null);
+    } catch (err) {
+      console.error("WebSocket auth error:", err);
+      resolve(null);
+    }
+  });
+}
