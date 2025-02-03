@@ -134,6 +134,26 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [latestVitals, setLatestVitals] = useState<VitalSigns>({});
+  
+  const [scenarios, setScenarios] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    const fetchScenarios = async () => {
+      try {
+        const response = await fetch("/api/scenarios");
+        if (response.ok) {
+          const data = await response.json();
+           setScenarios(data);
+        } else {
+          console.error("Failed to fetch scenarios");
+        }
+      } catch (error) {
+        console.error("Error fetching scenarios:", error);
+      }
+    };
+
+    fetchScenarios();
+  }, []);
 
   const { user } = useUser();
   const { toast } = useToast();
@@ -265,7 +285,11 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       const response = await fetch("/api/assistant/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, threadId }),
+        body: JSON.stringify({ 
+          content, 
+          threadId,
+          simulationType: scenarios?.find(s => s.id === scenarioId)?.type || "emergency"
+        }),
       });
       if (!response.ok) throw new Error("Failed to send message");
       return response.json();
@@ -508,6 +532,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     const formData = new FormData();
     formData.append('image', file);
     formData.append('threadId', threadId || '');
+    formData.append('simulationType', scenarios?.find(s => s.id === scenarioId)?.type || 'emergency');
 
     try {
       const response = await fetch('/api/assistant/upload-image', {

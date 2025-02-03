@@ -232,15 +232,16 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Update the message endpoint to handle simulation type
   app.post("/api/assistant/message", async (req: Request, res: Response) => {
     try {
-      const { content, threadId } = req.body;
+      const { content, threadId, simulationType = "emergency" } = req.body;
 
       if (!content || !threadId) {
         return res.status(400).json({ message: "Content and threadId are required" });
       }
 
-      const response = await sendMessage(content, threadId);
+      const response = await sendMessage(content, threadId, simulationType as "emergency" | "clinical");
       res.json(response);
     } catch (error) {
       console.error("Send message error:", error);
@@ -248,59 +249,59 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-    // New Vital Signs API endpoints
-    app.post("/api/vital-signs", async (req: Request, res: Response) => {
-      try {
-        if (!req.user?.id) {
-          return res.status(401).json({ message: "Unauthorized" });
-        }
-  
-        const { threadId, heartRate, systolicBP, diastolicBP, respiratoryRate, spo2, temperature } = req.body;
-  
-        const [vitalSign] = await db.insert(vitalSigns)
-          .values({
-            threadId,
-            userId: req.user.id,
-            heartRate,
-            systolicBP,
-            diastolicBP,
-            respiratoryRate,
-            spo2,
-            temperature,
-          })
-          .returning();
-  
-        res.json(vitalSign);
-      } catch (error) {
-        console.error("Save vital signs error:", error);
-        res.status(500).json({ message: "Failed to save vital signs" });
+  // New Vital Signs API endpoints
+  app.post("/api/vital-signs", async (req: Request, res: Response) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
       }
-    });
-  
-    app.get("/api/vital-signs/:threadId", async (req: Request, res: Response) => {
-      try {
-        if (!req.user?.id) {
-          return res.status(401).json({ message: "Unauthorized" });
-        }
-  
-        const { threadId } = req.params;
-  
-        const history = await db.select()
-          .from(vitalSigns)
-          .where(
-            and(
-              eq(vitalSigns.threadId, threadId),
-              eq(vitalSigns.userId, req.user.id)
-            )
+
+      const { threadId, heartRate, systolicBP, diastolicBP, respiratoryRate, spo2, temperature } = req.body;
+
+      const [vitalSign] = await db.insert(vitalSigns)
+        .values({
+          threadId,
+          userId: req.user.id,
+          heartRate,
+          systolicBP,
+          diastolicBP,
+          respiratoryRate,
+          spo2,
+          temperature,
+        })
+        .returning();
+
+      res.json(vitalSign);
+    } catch (error) {
+      console.error("Save vital signs error:", error);
+      res.status(500).json({ message: "Failed to save vital signs" });
+    }
+  });
+
+  app.get("/api/vital-signs/:threadId", async (req: Request, res: Response) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { threadId } = req.params;
+
+      const history = await db.select()
+        .from(vitalSigns)
+        .where(
+          and(
+            eq(vitalSigns.threadId, threadId),
+            eq(vitalSigns.userId, req.user.id)
           )
-          .orderBy(desc(vitalSigns.timestamp));
-  
-        res.json(history);
-      } catch (error) {
-        console.error("Get vital signs error:", error);
-        res.status(500).json({ message: "Failed to get vital signs history" });
-      }
-    });
+        )
+        .orderBy(desc(vitalSigns.timestamp));
+
+      res.json(history);
+    } catch (error) {
+      console.error("Get vital signs error:", error);
+      res.status(500).json({ message: "Failed to get vital signs history" });
+    }
+  });
 
 
   // Configure multer for image uploads
@@ -311,7 +312,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  const upload = multer({ 
+  const upload = multer({
     storage,
     limits: {
       fileSize: 5 * 1024 * 1024 // 5MB limit
@@ -326,7 +327,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Image upload endpoint
+  // Image upload endpoint needs to be updated too
   app.post("/api/assistant/upload-image", upload.single('image'), async (req: Request, res: Response) => {
     try {
       if (!req.file) {
@@ -341,7 +342,7 @@ export function registerRoutes(app: Express): Server {
       const imageBuffer = await fs.readFile(req.file.path);
       const base64Image = imageBuffer.toString('base64');
 
-      // Send image to OpenAI API
+      // Send image to OpenAI API with the correct simulation type
       const response = await sendMessage(
         [
           {
@@ -355,7 +356,8 @@ export function registerRoutes(app: Express): Server {
             }
           }
         ],
-        req.body.threadId
+        req.body.threadId,
+        req.body.simulationType || "emergency"
       );
 
       // Clean up the uploaded file

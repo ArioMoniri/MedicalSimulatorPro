@@ -7,12 +7,14 @@ if (!process.env.OPENAI_API_KEY) {
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Assistant ID for the emergency simulator
-const ASSISTANT_ID = "asst_kiBkT0Aq4TNAdBfpQpHZVj14";
+// Assistant IDs for different simulation types
+const EMERGENCY_ASSISTANT_ID = "asst_kiBkT0Aq4TNAdBfpQpHZVj14";
+const CLINICAL_ASSISTANT_ID = "asst_wbqffvCpp5EhMnyEID1TP8E1";
 
 export const assistantMessageSchema = z.object({
   content: z.string().min(1, "Message content is required"),
   threadId: z.string().optional(),
+  simulationType: z.enum(["emergency", "clinical"]).optional(),
 });
 
 export type AssistantMessage = z.infer<typeof assistantMessageSchema>;
@@ -27,7 +29,7 @@ export async function createThread() {
   }
 }
 
-export async function sendMessage(content: string, threadId: string) {
+export async function sendMessage(content: string | any[], threadId: string, simulationType: "emergency" | "clinical" = "emergency") {
   try {
     // Add the message to the thread
     await openai.beta.threads.messages.create(threadId, {
@@ -35,9 +37,12 @@ export async function sendMessage(content: string, threadId: string) {
       content,
     });
 
+    // Choose the appropriate assistant based on simulation type
+    const assistantId = simulationType === "clinical" ? CLINICAL_ASSISTANT_ID : EMERGENCY_ASSISTANT_ID;
+
     // Run the assistant
     const run = await openai.beta.threads.runs.create(threadId, {
-      assistant_id: ASSISTANT_ID,
+      assistant_id: assistantId,
     });
 
     // Wait for the run to complete with timeout
