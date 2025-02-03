@@ -112,12 +112,12 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
   useEffect(() => {
     if (latestVitals) {
       setVitalsHistory(prev => ({
-        hr: [...prev.hr, latestVitals.hr || 0].slice(-20),
-        systolic: [...prev.systolic, latestVitals.bp?.systolic || 0].slice(-20),
-        diastolic: [...prev.diastolic, latestVitals.bp?.diastolic || 0].slice(-20),
-        rr: [...prev.rr, latestVitals.rr || 0].slice(-20),
-        spo2: [...prev.spo2, latestVitals.spo2 || 0].slice(-20),
-        temp: [...prev.temp, latestVitals.temp || 0].slice(-20),
+        hr: [...prev.hr, latestVitals.hr || prev.hr[prev.hr.length - 1] || 0].slice(-20),
+        systolic: [...prev.systolic, latestVitals.bp?.systolic || prev.systolic[prev.systolic.length - 1] || 0].slice(-20),
+        diastolic: [...prev.diastolic, latestVitals.bp?.diastolic || prev.diastolic[prev.diastolic.length - 1] || 0].slice(-20),
+        rr: [...prev.rr, latestVitals.rr || prev.rr[prev.rr.length - 1] || 0].slice(-20),
+        spo2: [...prev.spo2, latestVitals.spo2 || prev.spo2[prev.spo2.length - 1] || 0].slice(-20),
+        temp: [...prev.temp, latestVitals.temp || prev.temp[prev.temp.length - 1] || 0].slice(-20),
       }));
     }
   }, [latestVitals]);
@@ -131,12 +131,32 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
     },
     scales: {
       y: {
-        type: 'linear' as const,
-        display: true,
-        position: 'left' as const,
+        grid: {
+          color: 'rgba(255, 255, 255, 0.1)',
+        },
+        ticks: {
+          color: 'rgba(255, 255, 255, 0.8)',
+        }
       },
+      x: {
+        grid: {
+          color: 'rgba(255, 255, 255, 0.1)',
+        },
+        ticks: {
+          color: 'rgba(255, 255, 255, 0.8)',
+        }
+      }
     },
-    animation: false,
+    plugins: {
+      legend: {
+        labels: {
+          color: 'rgba(255, 255, 255, 0.8)',
+        }
+      }
+    },
+    animation: {
+      duration: 750,
+    },
   };
 
   const data: ChartData<'line'> = {
@@ -194,65 +214,88 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Patient Vital Signs Monitor</CardTitle>
+    <Card className="bg-gray-900 text-white">
+      <CardHeader className="border-b border-gray-800">
+        <CardTitle className="text-xl font-bold">Patient Vital Signs Monitor</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-4">
+      <CardContent className="p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-6">
             {/* Animated Vitals Display */}
-            <div className="grid grid-cols-2 gap-4 p-4 bg-black rounded-lg">
-              <div className="flex items-center space-x-2 text-white">
+            <div className="grid grid-cols-2 gap-4 p-6 bg-black rounded-lg border border-gray-800">
+              <div className="flex items-center space-x-3">
                 <HeartBeatPulse heartRate={latestVitals.hr} />
-                <span className="font-mono text-xl">{latestVitals.hr || '-'}</span>
-                <span className="text-sm text-gray-400">bpm</span>
+                <div className="space-y-1">
+                  <span className="font-mono text-2xl tracking-wider">{latestVitals.hr || '--'}</span>
+                  <span className="block text-xs text-gray-400">BPM</span>
+                </div>
               </div>
-              <div className="flex items-center space-x-2 text-white">
+              <div className="flex items-center space-x-3">
                 <BreathingWave respiratoryRate={latestVitals.rr} />
-                <span className="font-mono text-xl">{latestVitals.rr || '-'}</span>
-                <span className="text-sm text-gray-400">/min</span>
+                <div className="space-y-1">
+                  <span className="font-mono text-2xl tracking-wider">{latestVitals.rr || '--'}</span>
+                  <span className="block text-xs text-gray-400">RR/min</span>
+                </div>
               </div>
-              <div className="flex items-center space-x-2 text-white">
+              <div className="flex items-center space-x-3">
                 <SpO2Pulse value={latestVitals.spo2} />
-                <span className="font-mono text-xl">{latestVitals.spo2 || '-'}</span>
-                <span className="text-sm text-gray-400">%</span>
+                <div className="space-y-1">
+                  <span className="font-mono text-2xl tracking-wider">{latestVitals.spo2 || '--'}</span>
+                  <span className="block text-xs text-gray-400">SpO₂ %</span>
+                </div>
               </div>
-              <div className="flex items-center space-x-2 text-white">
-                <motion.span 
-                  className="font-mono text-xl"
-                  animate={{ opacity: [1, 0.5, 1] }}
+              <div className="flex items-center space-x-3">
+                <motion.div 
+                  className="h-8 w-8 flex items-center justify-center rounded-full border border-blue-500"
+                  animate={{ scale: [1, 1.1, 1] }}
                   transition={{ duration: 2, repeat: Infinity }}
                 >
-                  {latestVitals.bp ? `${latestVitals.bp.systolic}/${latestVitals.bp.diastolic}` : '-'}
-                </motion.span>
-                <span className="text-sm text-gray-400">mmHg</span>
+                  <span className="text-xs text-blue-500">BP</span>
+                </motion.div>
+                <div className="space-y-1">
+                  <motion.span 
+                    className="font-mono text-2xl tracking-wider"
+                    animate={{ opacity: [1, 0.7, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  >
+                    {latestVitals.bp ? `${latestVitals.bp.systolic}/${latestVitals.bp.diastolic}` : '--/--'}
+                  </motion.span>
+                  <span className="block text-xs text-gray-400">mmHg</span>
+                </div>
               </div>
             </div>
 
-            {/* Charts */}
-            <div className="h-[200px]">
+            {/* Primary Vitals Chart */}
+            <div className="h-[250px] bg-black rounded-lg border border-gray-800 p-4">
               <Line options={options} data={data} />
             </div>
           </div>
-          <div className="space-y-4">
-            <div className="h-[200px]">
+
+          {/* Secondary Charts and Info */}
+          <div className="space-y-6">
+            <div className="h-[250px] bg-black rounded-lg border border-gray-800 p-4">
               <Line options={options} data={secondaryData} />
             </div>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="flex justify-between p-2 bg-muted rounded">
-                <span>Temp:</span>
-                <motion.span 
-                  className="font-medium"
-                  animate={{ scale: [1, 1.05, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  {latestVitals.temp || '-'}°C
-                </motion.span>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-black rounded-lg border border-gray-800">
+                <div className="space-y-2">
+                  <span className="text-sm text-gray-400">Temperature</span>
+                  <motion.div 
+                    className="font-mono text-2xl tracking-wider"
+                    animate={{ scale: [1, 1.02, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  >
+                    {latestVitals.temp?.toFixed(1) || '--'}°C
+                  </motion.div>
+                </div>
               </div>
-              <div className="flex justify-between p-2 bg-muted rounded">
-                <span>SpO₂:</span>
-                <span className="font-medium">{latestVitals.spo2 || '-'}%</span>
+              <div className="p-4 bg-black rounded-lg border border-gray-800">
+                <div className="space-y-2">
+                  <span className="text-sm text-gray-400">SpO₂ Trend</span>
+                  <div className="font-mono text-2xl tracking-wider">
+                    {latestVitals.spo2 || '--'}%
+                  </div>
+                </div>
               </div>
             </div>
           </div>

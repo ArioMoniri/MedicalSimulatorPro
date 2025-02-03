@@ -22,11 +22,17 @@ import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
 
 const parseVitalSigns = (content: string): VitalSigns | null => {
-  const hrMatch = content.match(/HR:\s*(\d+)\s*bpm/);
-  const bpMatch = content.match(/BP:\s*(\d+)\/(\d+)\s*mmHg/);
-  const rrMatch = content.match(/RR:\s*(\d+)/);
-  const spo2Match = content.match(/SpO₂:\s*(\d+)%/);
-  const tempMatch = content.match(/Temp:\s*(\d+\.?\d*)/);
+  // Look for vital signs block in markdown format
+  const vitalsMatch = content.match(/Vital Signs Monitor:\n\n([\s\S]*?)(?:\n\n|$)/);
+  if (!vitalsMatch) return null;
+
+  const vitalsBlock = vitalsMatch[1];
+
+  const hrMatch = vitalsBlock.match(/HR:\s*(\d+)\s*bpm/);
+  const bpMatch = vitalsBlock.match(/BP:\s*(\d+)\/(\d+)\s*mmHg/);
+  const rrMatch = vitalsBlock.match(/RR:\s*(\d+)/);
+  const spo2Match = vitalsBlock.match(/SpO₂:\s*(\d+)%/);
+  const tempMatch = vitalsBlock.match(/Temp:\s*(\d+\.?\d*)/);
 
   if (!hrMatch && !bpMatch && !rrMatch && !spo2Match && !tempMatch) {
     return null;
@@ -235,6 +241,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     const newChatId = Date.now().toString();
     setCurrentChatId(newChatId);
     setMessages([]);
+    setLatestVitals({}); // Reset vital signs for new chat
 
     // Create new thread
     createThreadMutation.mutate();
@@ -260,6 +267,19 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       const chatData = JSON.parse(savedChat);
       setMessages(chatData.messages);
       setThreadId(chatData.threadId);
+
+      // Update vital signs from the latest message containing vitals
+      const latestVitalsMessage = [...chatData.messages].reverse()
+        .find(msg => msg.role === "assistant" && msg.content.includes("Vital Signs Monitor:"));
+
+      if (latestVitalsMessage) {
+        const vitals = parseVitalSigns(latestVitalsMessage.content);
+        if (vitals) {
+          setLatestVitals(vitals);
+        }
+      } else {
+        setLatestVitals({}); // Reset if no vitals found
+      }
     }
   };
 
