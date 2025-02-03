@@ -30,8 +30,10 @@ interface Message {
 
 interface ChatHistory {
   id: string;
+  threadId: string;
   messages: Message[];
   createdAt: Date;
+  firstMessage: string;
   lastMessage: string;
 }
 
@@ -75,7 +77,9 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         setCurrentChatId(currentId);
         const savedChat = localStorage.getItem(`chat_${user?.id}_${scenarioId}_${currentId}`);
         if (savedChat) {
-          setMessages(JSON.parse(savedChat));
+          const chatData = JSON.parse(savedChat);
+          setMessages(chatData.messages);
+          setThreadId(chatData.threadId);
         }
       }
     };
@@ -88,20 +92,41 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   // Save chat history
   useEffect(() => {
     if (user?.id && currentChatId && messages.length > 0) {
-      // Save current chat
+      // Save current chat with threadId
+      const chatData = {
+        messages,
+        threadId,
+      };
       localStorage.setItem(
         `chat_${user?.id}_${scenarioId}_${currentChatId}`,
-        JSON.stringify(messages)
+        JSON.stringify(chatData)
       );
 
       // Update history list
+      const firstMessage = messages[0].content;
       const lastMessage = messages[messages.length - 1].content;
       const updatedHistory = chatHistory.map(chat => 
         chat.id === currentChatId 
-          ? { ...chat, lastMessage: lastMessage.substring(0, 100) + "..." }
+          ? { 
+              ...chat, 
+              firstMessage: firstMessage.substring(0, 100) + "...",
+              lastMessage: lastMessage.substring(0, 100) + "..."
+            }
           : chat
       );
 
+      if (!chatHistory.some(chat => chat.id === currentChatId)) {
+        updatedHistory.unshift({
+          id: currentChatId,
+          threadId: threadId || '',
+          messages,
+          createdAt: new Date(),
+          firstMessage: firstMessage.substring(0, 100) + "...",
+          lastMessage: lastMessage.substring(0, 100) + "..."
+        });
+      }
+
+      setChatHistory(updatedHistory);
       localStorage.setItem(
         `chat_history_list_${user?.id}_${scenarioId}`,
         JSON.stringify(updatedHistory)
@@ -113,7 +138,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         currentChatId
       );
     }
-  }, [messages, currentChatId, user?.id, scenarioId]);
+  }, [messages, currentChatId, user?.id, scenarioId, threadId]);
 
   // Create thread mutation
   const createThreadMutation = useMutation({
@@ -184,8 +209,10 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     // Add to history
     const newChat: ChatHistory = {
       id: newChatId,
+      threadId: '',
       messages: [],
       createdAt: new Date(),
+      firstMessage: "New conversation",
       lastMessage: "New conversation"
     };
 
@@ -197,7 +224,9 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     setCurrentChatId(chatId);
     const savedChat = localStorage.getItem(`chat_${user?.id}_${scenarioId}_${chatId}`);
     if (savedChat) {
-      setMessages(JSON.parse(savedChat));
+      const chatData = JSON.parse(savedChat);
+      setMessages(chatData.messages);
+      setThreadId(chatData.threadId);
     }
   };
 
@@ -429,10 +458,10 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                   >
                     <div className="flex flex-col items-start">
                       <span className="text-sm font-medium">
-                        {new Date(chat.createdAt).toLocaleString()}
+                        {chat.firstMessage}
                       </span>
-                      <span className="text-xs text-muted-foreground truncate">
-                        {chat.lastMessage}
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(chat.createdAt).toLocaleString()}
                       </span>
                     </div>
                   </Button>
