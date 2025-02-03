@@ -648,12 +648,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
               onKeyPress={(e) => e.key === "Enter" && handleSend()}
             />
             <VoiceInput onTranscript={handleVoiceInput} />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => document.getElementById("image-upload")?.click()}
-            >
-              <Upload className="h-4 w-4" />
+            <div className="relative">
               <input
                 id="image-upload"
                 type="file"
@@ -661,7 +656,19 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                 className="hidden"
                 onChange={handleImageUpload}
               />
-            </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  const input = document.getElementById('image-upload');
+                  if (input) {
+                    input.click();
+                  }
+                }}
+              >
+                <Upload className="h-4 w-4" />
+              </Button>
+            </div>
             <Button 
               size="icon" 
               onClick={handleSend}
