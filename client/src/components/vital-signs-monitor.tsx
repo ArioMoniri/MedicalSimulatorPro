@@ -110,10 +110,14 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
   });
 
   useEffect(() => {
+    console.log("VitalSignsMonitor received new vitals:", latestVitals);
+
     if (latestVitals && Object.keys(latestVitals).length > 0) {
       const currentTime = new Date().toLocaleTimeString();
 
       setVitalsHistory(prev => {
+        console.log("Current vitals history:", prev);
+
         const newHistory = {
           hr: [...prev.hr, latestVitals.hr ?? prev.hr[prev.hr.length - 1] ?? 0].slice(-20),
           systolic: [...prev.systolic, latestVitals.bp?.systolic ?? prev.systolic[prev.systolic.length - 1] ?? 0].slice(-20),
@@ -124,13 +128,22 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
           labels: [...prev.labels, currentTime].slice(-20),
         };
 
+        console.log("New vitals history:", newHistory);
+
+        // Check if there are actual changes
         const hasChanges = Object.entries(newHistory).some(([key, value]) => {
           if (key === 'labels') return false;
-          return value[value.length - 1] !== (prev as any)[key][prev[key as keyof typeof prev].length - 1];
+          const lastNew = value[value.length - 1];
+          const lastPrev = (prev as any)[key][prev[key as keyof typeof prev].length - 1];
+          console.log(`Comparing ${key}:`, lastNew, lastPrev);
+          return lastNew !== lastPrev;
         });
 
+        console.log("Has changes:", hasChanges);
         return hasChanges ? newHistory : prev;
       });
+    } else {
+      console.log("Received empty or invalid vitals");
     }
   }, [latestVitals]);
 

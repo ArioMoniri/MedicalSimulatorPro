@@ -24,6 +24,7 @@ import ReactMarkdown from 'react-markdown';
 const parseVitalSigns = (content: string): VitalSigns | null => {
   // First try to find a structured vital signs block
   const vitalsBlockMatch = content.match(/(?:Vital Signs:|Vitals:|Vital Signs Monitor:)([\s\S]*?)(?:\n\n|\n(?=[A-Za-z])|$)/i);
+  console.log("Parsing vital signs from:", content); // Debug log
 
   if (!vitalsBlockMatch) {
     // Try to find individual vital signs anywhere in the text
@@ -31,33 +32,54 @@ const parseVitalSigns = (content: string): VitalSigns | null => {
 
     // Match various HR formats
     const hrMatch = content.match(/(?:HR|Heart Rate):\s*(\d+)(?:\s*(?:bpm|beats\/min))?/i);
-    if (hrMatch) vitals.hr = parseInt(hrMatch[1]);
+    if (hrMatch) {
+      vitals.hr = parseInt(hrMatch[1]);
+      console.log("Found HR:", vitals.hr); // Debug log
+    }
 
     // Match BP with various formats
     const bpMatch = content.match(/(?:BP|Blood Pressure):\s*(\d+)\/(\d+)(?:\s*mmHg)?/i);
-    if (bpMatch) vitals.bp = { systolic: parseInt(bpMatch[1]), diastolic: parseInt(bpMatch[2]) };
+    if (bpMatch) {
+      vitals.bp = { systolic: parseInt(bpMatch[1]), diastolic: parseInt(bpMatch[2]) };
+      console.log("Found BP:", vitals.bp); // Debug log
+    }
 
     // Match RR with various formats
     const rrMatch = content.match(/(?:RR|Respiratory Rate):\s*(\d+)(?:\s*(?:breaths\/min|\/min))?/i);
-    if (rrMatch) vitals.rr = parseInt(rrMatch[1]);
+    if (rrMatch) {
+      vitals.rr = parseInt(rrMatch[1]);
+      console.log("Found RR:", vitals.rr); // Debug log
+    }
 
     // Match SpO2 with various formats and symbols
     const spo2Match = content.match(/(?:SpO₂|SpO2|O2 Sat|Oxygen Saturation):\s*(\d+)%/i);
-    if (spo2Match) vitals.spo2 = parseInt(spo2Match[1]);
+    if (spo2Match) {
+      vitals.spo2 = parseInt(spo2Match[1]);
+      console.log("Found SpO2:", vitals.spo2); // Debug log
+    }
 
     // Match temperature with various formats
     const tempMatch = content.match(/(?:Temp|Temperature):\s*([\d.]+)°?C/i);
-    if (tempMatch) vitals.temp = parseFloat(tempMatch[1]);
+    if (tempMatch) {
+      vitals.temp = parseFloat(tempMatch[1]);
+      console.log("Found Temp:", vitals.temp); // Debug log
+    }
 
-    return Object.keys(vitals).length > 0 ? vitals : null;
+    if (Object.keys(vitals).length > 0) {
+      console.log("Parsed vitals from text:", vitals);
+      return vitals;
+    }
+    return null;
   }
 
   const vitalsText = vitalsBlockMatch[1];
+  console.log("Found vitals block:", vitalsText); // Debug log
   const vitals: VitalSigns = {};
 
   // Parse individual vital signs within the block
   vitalsText.split(/[|,\n]/).forEach(part => {
     const cleaned = part.trim();
+    console.log("Parsing part:", cleaned); // Debug log
 
     const hrMatch = cleaned.match(/(?:HR|Heart Rate):\s*(\d+)(?:\s*(?:bpm|beats\/min))?/i);
     const bpMatch = cleaned.match(/(?:BP|Blood Pressure):\s*(\d+)\/(\d+)(?:\s*mmHg)?/i);
@@ -72,6 +94,7 @@ const parseVitalSigns = (content: string): VitalSigns | null => {
     if (tempMatch) vitals.temp = parseFloat(tempMatch[1]);
   });
 
+  console.log("Parsed vitals from block:", vitals); // Debug log
   return Object.keys(vitals).length > 0 ? vitals : null;
 };
 
@@ -260,15 +283,23 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
 
       // Check for vital signs in the message
       const vitals = parseVitalSigns(content);
-      if (vitals && threadId) {
-        console.log("Saving vitals:", vitals);
-        setLatestVitals(vitals);
-
-        // Persist vital signs to database
-        saveVitalSignsMutation.mutate({
-          ...vitals,
-          threadId,
+      if (vitals) {
+        console.log("Found new vitals:", vitals);
+        setLatestVitals(prevVitals => {
+          console.log("Previous vitals:", prevVitals);
+          console.log("Setting new vitals:", vitals);
+          return vitals;
         });
+
+        if (threadId) {
+          // Persist vital signs to database
+          saveVitalSignsMutation.mutate({
+            ...vitals,
+            threadId,
+          });
+        }
+      } else {
+        console.log("No vitals found in message");
       }
 
       // Add message to chat
