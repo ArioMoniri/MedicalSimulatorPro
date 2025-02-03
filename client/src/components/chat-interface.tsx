@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,6 +13,7 @@ import {
 import { Label } from "@/components/ui/label";
 import VoiceInput from "./voice-input";
 import TypingIndicator from "./typing-indicator";
+import VitalSignsMonitor, { VitalSigns } from "./vital-signs-monitor";
 import { useRoom } from "@/hooks/use-room";
 import { useUser } from "@/hooks/use-user";
 import { Send, Upload, Users, Plus } from "lucide-react";
@@ -20,12 +21,36 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
 
+const parseVitalSigns = (content: string): VitalSigns | null => {
+  const hrMatch = content.match(/HR:\s*(\d+)\s*bpm/);
+  const bpMatch = content.match(/BP:\s*(\d+)\/(\d+)\s*mmHg/);
+  const rrMatch = content.match(/RR:\s*(\d+)/);
+  const spo2Match = content.match(/SpO₂:\s*(\d+)%/);
+  const tempMatch = content.match(/Temp:\s*(\d+\.?\d*)/);
+
+  if (!hrMatch && !bpMatch && !rrMatch && !spo2Match && !tempMatch) {
+    return null;
+  }
+
+  return {
+    hr: hrMatch ? parseInt(hrMatch[1]) : undefined,
+    bp: bpMatch ? { systolic: parseInt(bpMatch[1]), diastolic: parseInt(bpMatch[2]) } : undefined,
+    rr: rrMatch ? parseInt(rrMatch[1]) : undefined,
+    spo2: spo2Match ? parseInt(spo2Match[1]) : undefined,
+    temp: tempMatch ? parseFloat(tempMatch[1]) : undefined,
+  };
+};
+
+const removeVitalSignsBlock = (content: string): string => {
+  return content.replace(/Vital Signs Monitor:\n\nHR:.*?Temp:.*?°C/gm, '').trim();
+};
+
 interface Message {
   id?: number;
   role: "user" | "assistant";
   content: string;
   username?: string;
-  createdAt?: Date;
+  createdAt?: string | Date;
 }
 
 interface ChatHistory {
@@ -51,6 +76,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const [isTyping, setIsTyping] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [latestVitals, setLatestVitals] = useState<VitalSigns>({});
 
   const { user } = useUser();
   const { toast } = useToast();
@@ -177,13 +203,20 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       const contentParts = data.content.split('---').map((part: string) => part.trim());
 
       contentParts.forEach((part: string) => {
-        setMessages(prev => [
-          ...prev,
-          { 
-            role: "assistant", 
-            content: part
-          }
-        ]);
+        const vitals = parseVitalSigns(part);
+        if (vitals) {
+          setLatestVitals(vitals);
+        }
+        const cleanContent = removeVitalSignsBlock(part);
+        if (cleanContent) {
+          setMessages(prev => [
+            ...prev,
+            { 
+              role: "assistant", 
+              content: cleanContent
+            }
+          ]);
+        }
       });
       setIsTyping(false);
     },
@@ -306,6 +339,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       role: "user",
       content: input,
       username: user?.username,
+      createdAt: new Date(),
     };
 
     setMessages([...messages, newMessage]);
@@ -441,6 +475,9 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Vital Signs Monitor */}
+      <VitalSignsMonitor latestVitals={latestVitals} />
 
       {/* Chat History Section */}
       {chatHistory.length > 0 && (
