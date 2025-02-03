@@ -22,8 +22,8 @@ import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
 
 const parseVitalSigns = (content: string): VitalSigns | null => {
-  // Look for vital signs block in markdown format
-  const vitalsMatch = content.match(/Vital Signs Monitor:\n\n([\s\S]*?)(?:\n\n|$)/);
+  // Look for vital signs block in API response
+  const vitalsMatch = content.match(/Vital Signs Monitor:\s*\n\n([\s\S]*?)(?:\n\n|$)/);
   if (!vitalsMatch) return null;
 
   const vitalsBlock = vitalsMatch[1];
@@ -32,23 +32,25 @@ const parseVitalSigns = (content: string): VitalSigns | null => {
   const bpMatch = vitalsBlock.match(/BP:\s*(\d+)\/(\d+)\s*mmHg/);
   const rrMatch = vitalsBlock.match(/RR:\s*(\d+)/);
   const spo2Match = vitalsBlock.match(/SpO₂:\s*(\d+)%/);
-  const tempMatch = vitalsBlock.match(/Temp:\s*(\d+\.?\d*)/);
+  const tempMatch = vitalsBlock.match(/Temp:\s*([\d.]+)°C/);
 
   if (!hrMatch && !bpMatch && !rrMatch && !spo2Match && !tempMatch) {
     return null;
   }
 
-  return {
-    hr: hrMatch ? parseInt(hrMatch[1]) : undefined,
-    bp: bpMatch ? { systolic: parseInt(bpMatch[1]), diastolic: parseInt(bpMatch[2]) } : undefined,
-    rr: rrMatch ? parseInt(rrMatch[1]) : undefined,
-    spo2: spo2Match ? parseInt(spo2Match[1]) : undefined,
-    temp: tempMatch ? parseFloat(tempMatch[1]) : undefined,
-  };
+  const vitals: VitalSigns = {};
+
+  if (hrMatch) vitals.hr = parseInt(hrMatch[1]);
+  if (bpMatch) vitals.bp = { systolic: parseInt(bpMatch[1]), diastolic: parseInt(bpMatch[2]) };
+  if (rrMatch) vitals.rr = parseInt(rrMatch[1]);
+  if (spo2Match) vitals.spo2 = parseInt(spo2Match[1]);
+  if (tempMatch) vitals.temp = parseFloat(tempMatch[1]);
+
+  return vitals;
 };
 
 const removeVitalSignsBlock = (content: string): string => {
-  return content.replace(/Vital Signs Monitor:\n\nHR:.*?Temp:.*?°C/gm, '').trim();
+  return content.replace(/Vital Signs Monitor:\n\n[\s\S]*?(?:\n\n|$)/, '').trim();
 };
 
 interface Message {
@@ -206,11 +208,13 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       return response.json();
     },
     onSuccess: (data) => {
+      // Split response by "---" if present, otherwise treat as single message
       const contentParts = data.content.split('---').map((part: string) => part.trim());
 
       contentParts.forEach((part: string) => {
         const vitals = parseVitalSigns(part);
         if (vitals) {
+          console.log("Updating vitals:", vitals); // Debug log
           setLatestVitals(vitals);
         }
         const cleanContent = removeVitalSignsBlock(part);
@@ -259,7 +263,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     setChatHistory(prev => [newChat, ...prev]);
   };
 
-  // Load previous chat
+  // Handle loading previous chat
   const handleLoadChat = (chatId: string) => {
     setCurrentChatId(chatId);
     const savedChat = localStorage.getItem(`chat_${user?.id}_${scenarioId}_${chatId}`);
@@ -268,17 +272,19 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       setMessages(chatData.messages);
       setThreadId(chatData.threadId);
 
-      // Update vital signs from the latest message containing vitals
-      const latestVitalsMessage = [...chatData.messages].reverse()
+      // Find the latest message containing vital signs
+      const latestVitalsMessage = [...chatData.messages]
+        .reverse()
         .find(msg => msg.role === "assistant" && msg.content.includes("Vital Signs Monitor:"));
 
       if (latestVitalsMessage) {
         const vitals = parseVitalSigns(latestVitalsMessage.content);
+        console.log("Loading vitals from history:", vitals); // Debug log
         if (vitals) {
           setLatestVitals(vitals);
         }
       } else {
-        setLatestVitals({}); // Reset if no vitals found
+        setLatestVitals({});
       }
     }
   };
