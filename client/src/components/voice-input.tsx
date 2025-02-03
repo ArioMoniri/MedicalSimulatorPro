@@ -26,9 +26,9 @@ export default function VoiceInput({ onTranscript }: VoiceInputProps) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition && !recognitionRef.current) {
         const recognition = new SpeechRecognition();
-        recognition.continuous = true;
+        recognition.continuous = false; // Changed to false to better handle session management
         recognition.interimResults = true;
-        recognition.lang = 'en-US'; // Set language explicitly
+        recognition.lang = 'en-US';
 
         recognition.onstart = () => {
           console.log("Voice recognition started");
@@ -54,40 +54,21 @@ export default function VoiceInput({ onTranscript }: VoiceInputProps) {
           console.error("Speech recognition error:", event.error);
           setIsRecording(false);
 
-          let errorMessage = "An error occurred. Please try again.";
-          switch (event.error) {
-            case 'network':
-              errorMessage = "Network connection is required for voice input. Please check your connection.";
-              break;
-            case 'not-allowed':
-              errorMessage = "Microphone access was denied. Please enable microphone access in your browser settings.";
-              setHasPermission(false);
-              break;
-            case 'no-speech':
-              errorMessage = "No speech was detected. Please try again.";
-              break;
-            case 'aborted':
-              return; // Don't show error for user-initiated stops
+          // Only show error messages for critical errors
+          if (event.error === 'not-allowed') {
+            toast({
+              variant: "destructive",
+              title: "Microphone Access Required",
+              description: "Please enable microphone access in your browser settings"
+            });
+            setHasPermission(false);
           }
-
-          toast({
-            variant: "destructive",
-            title: "Voice Input Error",
-            description: errorMessage
-          });
         };
 
         recognitionRef.current = recognition;
-      } else if (!SpeechRecognition) {
-        toast({
-          variant: "destructive",
-          title: "Voice Input Not Supported",
-          description: "Your browser doesn't support voice input. Please try using a modern browser like Chrome."
-        });
       }
     }
 
-    // Cleanup
     return () => {
       if (recognitionRef.current && isRecording) {
         recognitionRef.current.stop();
@@ -104,17 +85,17 @@ export default function VoiceInput({ onTranscript }: VoiceInputProps) {
     } catch (error) {
       console.error("Microphone permission error:", error);
       setHasPermission(false);
+      toast({
+        variant: "destructive",
+        title: "Microphone Access Required",
+        description: "Please enable microphone access in your browser settings"
+      });
       return false;
     }
   };
 
   const toggleRecording = useCallback(async () => {
     if (!recognitionRef.current) {
-      toast({
-        variant: "destructive",
-        title: "Voice Input Error",
-        description: "Speech recognition is not initialized"
-      });
       return;
     }
 
@@ -125,14 +106,7 @@ export default function VoiceInput({ onTranscript }: VoiceInputProps) {
         // Check/request microphone permission first
         if (hasPermission === null) {
           const permitted = await checkMicrophonePermission();
-          if (!permitted) {
-            toast({
-              variant: "destructive",
-              title: "Microphone Access Required",
-              description: "Please allow microphone access to use voice input"
-            });
-            return;
-          }
+          if (!permitted) return;
         } else if (!hasPermission) {
           toast({
             variant: "destructive",
@@ -142,26 +116,20 @@ export default function VoiceInput({ onTranscript }: VoiceInputProps) {
           return;
         }
 
-        // Check network connectivity
-        if (!navigator.onLine) {
-          toast({
-            variant: "destructive",
-            title: "Network Error",
-            description: "Please check your internet connection to use voice input"
-          });
-          return;
-        }
-
-        recognitionRef.current.start();
+        await recognitionRef.current.start();
       }
     } catch (error) {
       console.error("Speech recognition error:", error);
       setIsRecording(false);
-      toast({
-        variant: "destructive",
-        title: "Voice Input Error",
-        description: "Failed to start voice input. Please try again."
-      });
+
+      // Only show error for non-abort errors
+      if (error instanceof Error && !error.message.includes('aborted')) {
+        toast({
+          variant: "destructive",
+          title: "Voice Input Error",
+          description: "Failed to start voice input. Please try again."
+        });
+      }
     }
   }, [isRecording, hasPermission, toast]);
 
