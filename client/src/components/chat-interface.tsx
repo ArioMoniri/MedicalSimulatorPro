@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -694,6 +695,12 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                   message.role === "user" ? "justify-end" : "justify-start"
                 }`}
               >
+                {message.role === "assistant" && (
+                  <Avatar className="h-8 w-8 mr-2">
+                    <AvatarImage src="/assistant-profile.jpeg" alt="Assistant" />
+                    <AvatarFallback>AI</AvatarFallback>
+                  </Avatar>
+                )}
                 <div
                   className={`rounded-lg px-4 py-2 max-w-[80%] ${
                     message.role === "user"
