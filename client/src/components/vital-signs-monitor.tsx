@@ -37,12 +37,36 @@ interface VitalSignsMonitorProps {
   latestVitals: VitalSigns;
 }
 
-const HeartBeatPulse = ({ heartRate }: { heartRate?: number }) => {
+// Helper function to determine vital sign status
+const getVitalStatus = (type: string, value?: number): 'normal' | 'warning' | 'critical' => {
+  if (!value) return 'normal';
+
+  switch (type) {
+    case 'hr':
+      return value < 60 || value > 100 ? value < 50 || value > 120 ? 'critical' : 'warning' : 'normal';
+    case 'systolic':
+      return value < 90 || value > 140 ? value < 80 || value > 160 ? 'critical' : 'warning' : 'normal';
+    case 'diastolic':
+      return value < 60 || value > 90 ? value < 50 || value > 100 ? 'critical' : 'warning' : 'normal';
+    case 'rr':
+      return value < 12 || value > 20 ? value < 8 || value > 24 ? 'critical' : 'warning' : 'normal';
+    case 'spo2':
+      return value < 95 ? value < 90 ? 'critical' : 'warning' : 'normal';
+    case 'temp':
+      return value < 36 || value > 37.5 ? value < 35 || value > 38.5 ? 'critical' : 'warning' : 'normal';
+    default:
+      return 'normal';
+  }
+};
+
+const HeartBeatPulse = ({ heartRate, status }: { heartRate?: number, status: string }) => {
   const duration = heartRate ? 60 / heartRate : 1;
+  const color = status === 'critical' ? 'bg-red-600' : status === 'warning' ? 'bg-yellow-500' : 'bg-emerald-500';
+
   return (
-    <div className="relative h-8 w-8">
+    <div className="relative h-10 w-10 flex items-center justify-center">
       <motion.div
-        className="absolute inset-0 bg-red-500 rounded-full"
+        className={`absolute inset-0 rounded-full ${color}`}
         animate={{
           scale: [1, 1.2, 1],
           opacity: [0.6, 0.8, 0.6],
@@ -53,40 +77,64 @@ const HeartBeatPulse = ({ heartRate }: { heartRate?: number }) => {
           ease: "easeInOut",
         }}
       />
+      <span className="relative text-xs font-bold text-white">HR</span>
     </div>
   );
 };
 
-const BreathingWave = ({ respiratoryRate }: { respiratoryRate?: number }) => {
-  const duration = respiratoryRate ? 60 / respiratoryRate : 3;
-  return (
-    <motion.div
-      className="h-8 w-16 bg-blue-500"
-      animate={{
-        scaleY: [1, 1.5, 1],
-      }}
-      transition={{
-        duration,
-        repeat: Infinity,
-        ease: "easeInOut",
-      }}
-    />
-  );
-};
+const SpO2Indicator = ({ value, status }: { value?: number, status: string }) => {
+  const color = status === 'critical' ? 'bg-red-600' : status === 'warning' ? 'bg-yellow-500' : 'bg-emerald-500';
 
-const SpO2Pulse = ({ value }: { value?: number }) => {
   return (
     <motion.div
-      className="h-6 w-6 rounded-full bg-purple-500"
+      className={`h-10 w-10 rounded-full ${color} flex items-center justify-center`}
       animate={{
-        opacity: [0.5, 1, 0.5],
+        scale: [1, 1.1, 1],
+        opacity: [0.8, 1, 0.8],
       }}
       transition={{
         duration: 2,
         repeat: Infinity,
         ease: "easeInOut",
       }}
-    />
+    >
+      <span className="text-xs font-bold text-white">O₂</span>
+    </motion.div>
+  );
+};
+
+const VitalSignBox = ({ 
+  label, 
+  value, 
+  unit, 
+  status 
+}: { 
+  label: string; 
+  value: string; 
+  unit: string; 
+  status: 'normal' | 'warning' | 'critical' 
+}) => {
+  const bgColor = status === 'critical' ? 'bg-red-950/50' : status === 'warning' ? 'bg-yellow-950/50' : 'bg-emerald-950/50';
+  const borderColor = status === 'critical' ? 'border-red-600' : status === 'warning' ? 'border-yellow-500' : 'border-emerald-500';
+
+  return (
+    <div className={`p-4 rounded-lg border ${borderColor} ${bgColor}`}>
+      <div className="space-y-1">
+        <span className="text-sm font-medium text-gray-400">{label}</span>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={value}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="font-mono text-2xl tracking-wider font-bold"
+          >
+            {value}
+            <span className="text-sm font-normal text-gray-400 ml-1">{unit}</span>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>
   );
 };
 
@@ -109,15 +157,18 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
     labels: [],
   });
 
-  useEffect(() => {
-    console.log("VitalSignsMonitor received new vitals:", latestVitals);
+  const hrStatus = getVitalStatus('hr', latestVitals.hr);
+  const systolicStatus = getVitalStatus('systolic', latestVitals.bp?.systolic);
+  const diastolicStatus = getVitalStatus('diastolic', latestVitals.bp?.diastolic);
+  const rrStatus = getVitalStatus('rr', latestVitals.rr);
+  const spo2Status = getVitalStatus('spo2', latestVitals.spo2);
+  const tempStatus = getVitalStatus('temp', latestVitals.temp);
 
+  useEffect(() => {
     if (latestVitals && Object.keys(latestVitals).length > 0) {
       const currentTime = new Date().toLocaleTimeString();
 
       setVitalsHistory(prev => {
-        console.log("Current vitals history:", prev);
-
         const newHistory = {
           hr: [...prev.hr, latestVitals.hr ?? prev.hr[prev.hr.length - 1] ?? 0].slice(-20),
           systolic: [...prev.systolic, latestVitals.bp?.systolic ?? prev.systolic[prev.systolic.length - 1] ?? 0].slice(-20),
@@ -128,26 +179,17 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
           labels: [...prev.labels, currentTime].slice(-20),
         };
 
-        console.log("New vitals history:", newHistory);
-
-        // Check if there are actual changes
         const hasChanges = Object.entries(newHistory).some(([key, value]) => {
           if (key === 'labels') return false;
-          const lastNew = value[value.length - 1];
-          const lastPrev = (prev as any)[key][prev[key as keyof typeof prev].length - 1];
-          console.log(`Comparing ${key}:`, lastNew, lastPrev);
-          return lastNew !== lastPrev;
+          return value[value.length - 1] !== (prev as any)[key][prev[key as keyof typeof prev].length - 1];
         });
 
-        console.log("Has changes:", hasChanges);
         return hasChanges ? newHistory : prev;
       });
-    } else {
-      console.log("Received empty or invalid vitals");
     }
   }, [latestVitals]);
 
-  const options: ChartOptions<'line'> = {
+  const chartOptions: ChartOptions<'line'> = {
     responsive: true,
     maintainAspectRatio: false,
     animation: {
@@ -160,6 +202,9 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         },
         ticks: {
           color: 'rgba(255, 255, 255, 0.8)',
+          font: {
+            size: 11,
+          },
         }
       },
       x: {
@@ -170,6 +215,13 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
           color: 'rgba(255, 255, 255, 0.8)',
           maxRotation: 45,
           minRotation: 45,
+          font: {
+            size: 10,
+          },
+          callback: function(val, index) {
+            // Show fewer x-axis labels
+            return index % 2 === 0 ? this.getLabelForValue(val as number) : '';
+          }
         }
       }
     },
@@ -177,11 +229,23 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
       legend: {
         labels: {
           color: 'rgba(255, 255, 255, 0.8)',
-        }
+          font: {
+            size: 11,
+          },
+          boxWidth: 15,
+        },
+        position: 'top',
       },
       tooltip: {
         mode: 'index',
         intersect: false,
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        titleFont: {
+          size: 12,
+        },
+        bodyFont: {
+          size: 11,
+        },
       },
     },
   };
@@ -190,25 +254,28 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
     labels: vitalsHistory.labels,
     datasets: [
       {
-        label: 'Heart Rate (bpm)',
+        label: 'Heart Rate',
         data: vitalsHistory.hr,
         borderColor: 'rgb(255, 99, 132)',
         backgroundColor: 'rgba(255, 99, 132, 0.5)',
         tension: 0.2,
+        borderWidth: 2,
       },
       {
-        label: 'BP Systolic (mmHg)',
+        label: 'BP Systolic',
         data: vitalsHistory.systolic,
         borderColor: 'rgb(53, 162, 235)',
         backgroundColor: 'rgba(53, 162, 235, 0.5)',
         tension: 0.2,
+        borderWidth: 2,
       },
       {
-        label: 'BP Diastolic (mmHg)',
+        label: 'BP Diastolic',
         data: vitalsHistory.diastolic,
         borderColor: 'rgb(75, 192, 192)',
         backgroundColor: 'rgba(75, 192, 192, 0.5)',
         tension: 0.2,
+        borderWidth: 2,
       },
     ],
   };
@@ -217,162 +284,87 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
     labels: vitalsHistory.labels,
     datasets: [
       {
-        label: 'Respiratory Rate (breaths/min)',
+        label: 'Resp Rate',
         data: vitalsHistory.rr,
         borderColor: 'rgb(255, 159, 64)',
         backgroundColor: 'rgba(255, 159, 64, 0.5)',
         tension: 0.2,
+        borderWidth: 2,
       },
       {
-        label: 'SpO2 (%)',
+        label: 'SpO₂',
         data: vitalsHistory.spo2,
         borderColor: 'rgb(153, 102, 255)',
         backgroundColor: 'rgba(153, 102, 255, 0.5)',
         tension: 0.2,
+        borderWidth: 2,
       },
       {
-        label: 'Temperature (°C)',
+        label: 'Temp',
         data: vitalsHistory.temp,
         borderColor: 'rgb(255, 205, 86)',
         backgroundColor: 'rgba(255, 205, 86, 0.5)',
         tension: 0.2,
+        borderWidth: 2,
       },
     ],
   };
 
   return (
-    <Card className="bg-gray-900 text-white">
+    <Card className="bg-gray-900 text-white shadow-xl">
       <CardHeader className="border-b border-gray-800">
-        <CardTitle className="text-xl font-bold">Patient Vital Signs Monitor</CardTitle>
+        <CardTitle className="text-xl font-bold flex items-center gap-2">
+          <span className="text-emerald-500">●</span>
+          Patient Vital Signs Monitor
+        </CardTitle>
       </CardHeader>
-      <CardContent className="p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="space-y-6">
-            {/* Animated Vitals Display */}
-            <div className="grid grid-cols-2 gap-4 p-6 bg-black rounded-lg border border-gray-800">
-              <div className="flex items-center space-x-3">
-                <HeartBeatPulse heartRate={latestVitals.hr} />
-                <div className="space-y-1">
-                  <AnimatePresence mode="wait">
-                    <motion.span
-                      key={latestVitals.hr || 'no-hr'}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="font-mono text-2xl tracking-wider"
-                    >
-                      {latestVitals.hr || '--'}
-                    </motion.span>
-                  </AnimatePresence>
-                  <span className="block text-xs text-gray-400">BPM</span>
-                </div>
-              </div>
+      <CardContent className="p-6 space-y-6">
+        {/* Main Vital Signs Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <VitalSignBox
+            label="Heart Rate"
+            value={latestVitals.hr?.toString() || '--'}
+            unit="bpm"
+            status={hrStatus}
+          />
+          <VitalSignBox
+            label="Blood Pressure"
+            value={latestVitals.bp ? `${latestVitals.bp.systolic}/${latestVitals.bp.diastolic}` : '--/--'}
+            unit="mmHg"
+            status={systolicStatus}
+          />
+          <VitalSignBox
+            label="Respiratory Rate"
+            value={latestVitals.rr?.toString() || '--'}
+            unit="breaths/min"
+            status={rrStatus}
+          />
+          <VitalSignBox
+            label="SpO₂"
+            value={latestVitals.spo2?.toString() || '--'}
+            unit="%"
+            status={spo2Status}
+          />
+          <VitalSignBox
+            label="Temperature"
+            value={latestVitals.temp?.toFixed(1) || '--'}
+            unit="°C"
+            status={tempStatus}
+          />
+        </div>
 
-              <div className="flex items-center space-x-3">
-                <BreathingWave respiratoryRate={latestVitals.rr} />
-                <div className="space-y-1">
-                  <AnimatePresence mode="wait">
-                    <motion.span
-                      key={latestVitals.rr || 'no-rr'}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="font-mono text-2xl tracking-wider"
-                    >
-                      {latestVitals.rr || '--'}
-                    </motion.span>
-                  </AnimatePresence>
-                  <span className="block text-xs text-gray-400">RR/min</span>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <SpO2Pulse value={latestVitals.spo2} />
-                <div className="space-y-1">
-                  <AnimatePresence mode="wait">
-                    <motion.span
-                      key={latestVitals.spo2 || 'no-spo2'}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="font-mono text-2xl tracking-wider"
-                    >
-                      {latestVitals.spo2 || '--'}
-                    </motion.span>
-                  </AnimatePresence>
-                  <span className="block text-xs text-gray-400">SpO₂ %</span>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <motion.div 
-                  className="h-8 w-8 flex items-center justify-center rounded-full border border-blue-500"
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  <span className="text-xs text-blue-500">BP</span>
-                </motion.div>
-                <div className="space-y-1">
-                  <AnimatePresence mode="wait">
-                    <motion.span 
-                      key={`${latestVitals.bp?.systolic || 'no-bp'}-${latestVitals.bp?.diastolic || 'no-bp'}`}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="font-mono text-2xl tracking-wider"
-                    >
-                      {latestVitals.bp ? `${latestVitals.bp.systolic}/${latestVitals.bp.diastolic}` : '--/--'}
-                    </motion.span>
-                  </AnimatePresence>
-                  <span className="block text-xs text-gray-400">mmHg</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Primary Vitals Chart */}
-            <div className="h-[250px] bg-black rounded-lg border border-gray-800 p-4">
-              <Line options={options} data={primaryData} />
+        {/* Charts Section */}
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium text-gray-400">Cardiovascular Trends</h3>
+            <div className="h-[250px] bg-black/50 rounded-lg border border-gray-800 p-4">
+              <Line options={chartOptions} data={primaryData} />
             </div>
           </div>
-
-          {/* Secondary Charts and Info */}
-          <div className="space-y-6">
-            <div className="h-[250px] bg-black rounded-lg border border-gray-800 p-4">
-              <Line options={options} data={secondaryData} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-black rounded-lg border border-gray-800">
-                <div className="space-y-2">
-                  <span className="text-sm text-gray-400">Temperature</span>
-                  <AnimatePresence mode="wait">
-                    <motion.div 
-                      key={latestVitals.temp || 'no-temp'}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="font-mono text-2xl tracking-wider"
-                    >
-                      {latestVitals.temp?.toFixed(1) || '--'}°C
-                    </motion.div>
-                  </AnimatePresence>
-                </div>
-              </div>
-              <div className="p-4 bg-black rounded-lg border border-gray-800">
-                <div className="space-y-2">
-                  <span className="text-sm text-gray-400">SpO₂ Trend</span>
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={latestVitals.spo2 || 'no-spo2'}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="font-mono text-2xl tracking-wider"
-                    >
-                      {latestVitals.spo2 || '--'}%
-                    </motion.div>
-                  </AnimatePresence>
-                </div>
-              </div>
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium text-gray-400">Respiratory & Temperature Trends</h3>
+            <div className="h-[250px] bg-black/50 rounded-lg border border-gray-800 p-4">
+              <Line options={chartOptions} data={secondaryData} />
             </div>
           </div>
         </div>
