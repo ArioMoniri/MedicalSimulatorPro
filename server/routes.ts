@@ -47,7 +47,7 @@ export function registerRoutes(app: Express): Server {
           },
           {
             title: "Diabetes Initial Consultation",
-            description: "Conduct initial consultation for newly diagnosed type 2 diabetes",
+            description: "Conduct initial consultation",
             type: "clinical",
             content: {
               initialState: "Patient referred for diabetes management",
