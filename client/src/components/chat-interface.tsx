@@ -15,7 +15,7 @@ import VoiceInput from "./voice-input";
 import TypingIndicator from "./typing-indicator";
 import { useRoom } from "@/hooks/use-room";
 import { useUser } from "@/hooks/use-user";
-import { Send, Upload, Users } from "lucide-react";
+import { Send, Upload, Users, Plus } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
@@ -26,6 +26,13 @@ interface Message {
   content: string;
   username?: string;
   createdAt?: Date;
+}
+
+interface ChatHistory {
+  id: string;
+  messages: Message[];
+  createdAt: Date;
+  lastMessage: string;
 }
 
 interface ChatInterfaceProps {
@@ -40,6 +47,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
+  const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
   const { user } = useUser();
   const { toast } = useToast();
@@ -52,23 +61,59 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     isConnected,
   } = useRoom();
 
-  // Load conversation history
+  // Load chat history
   useEffect(() => {
-    const savedMessages = localStorage.getItem(`chat_history_${user?.id}_${scenarioId}`);
-    if (savedMessages) {
-      setMessages(JSON.parse(savedMessages));
+    const loadHistory = () => {
+      const history = localStorage.getItem(`chat_history_list_${user?.id}_${scenarioId}`);
+      if (history) {
+        setChatHistory(JSON.parse(history));
+      }
+
+      // Load current chat if exists
+      const currentId = localStorage.getItem(`current_chat_${user?.id}_${scenarioId}`);
+      if (currentId) {
+        setCurrentChatId(currentId);
+        const savedChat = localStorage.getItem(`chat_${user?.id}_${scenarioId}_${currentId}`);
+        if (savedChat) {
+          setMessages(JSON.parse(savedChat));
+        }
+      }
+    };
+
+    if (user?.id) {
+      loadHistory();
     }
   }, [user?.id, scenarioId]);
 
-  // Save conversation history
+  // Save chat history
   useEffect(() => {
-    if (user?.id && messages.length > 0) {
+    if (user?.id && currentChatId && messages.length > 0) {
+      // Save current chat
       localStorage.setItem(
-        `chat_history_${user?.id}_${scenarioId}`,
+        `chat_${user?.id}_${scenarioId}_${currentChatId}`,
         JSON.stringify(messages)
       );
+
+      // Update history list
+      const lastMessage = messages[messages.length - 1].content;
+      const updatedHistory = chatHistory.map(chat => 
+        chat.id === currentChatId 
+          ? { ...chat, lastMessage: lastMessage.substring(0, 100) + "..." }
+          : chat
+      );
+
+      localStorage.setItem(
+        `chat_history_list_${user?.id}_${scenarioId}`,
+        JSON.stringify(updatedHistory)
+      );
+
+      // Save current chat id
+      localStorage.setItem(
+        `current_chat_${user?.id}_${scenarioId}`,
+        currentChatId
+      );
     }
-  }, [messages, user?.id, scenarioId]);
+  }, [messages, currentChatId, user?.id, scenarioId]);
 
   // Create thread mutation
   const createThreadMutation = useMutation({
@@ -127,10 +172,39 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     },
   });
 
+  // Start new chat
+  const handleNewChat = async () => {
+    const newChatId = Date.now().toString();
+    setCurrentChatId(newChatId);
+    setMessages([]);
+
+    // Create new thread
+    createThreadMutation.mutate();
+
+    // Add to history
+    const newChat: ChatHistory = {
+      id: newChatId,
+      messages: [],
+      createdAt: new Date(),
+      lastMessage: "New conversation"
+    };
+
+    setChatHistory(prev => [newChat, ...prev]);
+  };
+
+  // Load previous chat
+  const handleLoadChat = (chatId: string) => {
+    setCurrentChatId(chatId);
+    const savedChat = localStorage.getItem(`chat_${user?.id}_${scenarioId}_${chatId}`);
+    if (savedChat) {
+      setMessages(JSON.parse(savedChat));
+    }
+  };
+
   // Initialize thread when component mounts
   useEffect(() => {
-    if (!threadId) {
-      createThreadMutation.mutate();
+    if (!threadId && !currentChatId) {
+      handleNewChat();
     }
   }, []);
 
@@ -227,105 +301,147 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   };
 
   return (
-    <Card className="h-[600px] flex flex-col">
-      <CardContent className="flex-none p-4 border-b">
-        <div className="flex justify-between items-center">
-          <h3 className="font-semibold">Chat Interface</h3>
-          {!roomId ? (
+    <div className="space-y-6">
+      <Card className="h-[600px] flex flex-col">
+        <CardContent className="flex-none p-4 border-b">
+          <div className="flex justify-between items-center">
+            <h3 className="font-semibold">Chat Interface</h3>
             <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleCreateRoom}
+                onClick={handleNewChat}
               >
-                Create Room
+                <Plus className="h-4 w-4 mr-2" />
+                New Chat
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowJoinDialog(true)}
-              >
-                Join Room
-              </Button>
+              {!roomId ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCreateRoom}
+                  >
+                    Create Room
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowJoinDialog(true)}
+                  >
+                    Join Room
+                  </Button>
+                </>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Users className="h-4 w-4" />
+                  <span>Collaborative Mode</span>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Users className="h-4 w-4" />
-              <span>Collaborative Mode</span>
-            </div>
-          )}
-        </div>
-      </CardContent>
+          </div>
+        </CardContent>
 
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-4">
-          {messages.map((message, i) => (
-            <div
-              key={i}
-              className={`flex ${
-                message.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
+        <ScrollArea className="flex-1 p-4">
+          <div className="space-y-4">
+            {messages.map((message, i) => (
               <div
-                className={`rounded-lg px-4 py-2 max-w-[80%] ${
-                  message.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
+                key={i}
+                className={`flex ${
+                  message.role === "user" ? "justify-end" : "justify-start"
                 }`}
               >
-                {message.username && (
-                  <div className="text-xs font-medium mb-1">
-                    {message.username}
+                <div
+                  className={`rounded-lg px-4 py-2 max-w-[80%] ${
+                    message.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted"
+                  }`}
+                >
+                  {message.username && (
+                    <div className="text-xs font-medium mb-1">
+                      {message.username}
+                    </div>
+                  )}
+                  <div className="prose prose-sm max-w-none dark:prose-invert">
+                    <ReactMarkdown>{message.content}</ReactMarkdown>
                   </div>
-                )}
-                <div className="prose prose-sm max-w-none dark:prose-invert">
-                  <ReactMarkdown>{message.content}</ReactMarkdown>
                 </div>
               </div>
-            </div>
-          ))}
-          {isTyping && (
-            <div className="flex justify-start">
-              <div className="rounded-lg px-4 py-2 bg-muted">
-                <TypingIndicator />
+            ))}
+            {isTyping && (
+              <div className="flex justify-start">
+                <div className="rounded-lg px-4 py-2 bg-muted">
+                  <TypingIndicator />
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      </ScrollArea>
+            )}
+          </div>
+        </ScrollArea>
 
-      <CardContent className="border-t p-4">
-        <div className="flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your message..."
-            onKeyPress={(e) => e.key === "Enter" && handleSend()}
-          />
-          <VoiceInput onTranscript={handleVoiceInput} />
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => document.getElementById("image-upload")?.click()}
-          >
-            <Upload className="h-4 w-4" />
-            <input
-              id="image-upload"
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleImageUpload}
+        <CardContent className="border-t p-4">
+          <div className="flex gap-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Type your message..."
+              onKeyPress={(e) => e.key === "Enter" && handleSend()}
             />
-          </Button>
-          <Button 
-            size="icon" 
-            onClick={handleSend}
-            disabled={sendMessageMutation.isPending || isTyping}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardContent>
+            <VoiceInput onTranscript={handleVoiceInput} />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => document.getElementById("image-upload")?.click()}
+            >
+              <Upload className="h-4 w-4" />
+              <input
+                id="image-upload"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+            </Button>
+            <Button 
+              size="icon" 
+              onClick={handleSend}
+              disabled={sendMessageMutation.isPending || isTyping}
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Chat History Section */}
+      {chatHistory.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <h4 className="font-semibold mb-4">Chat History</h4>
+            <ScrollArea className="h-[200px]">
+              <div className="space-y-2">
+                {chatHistory.map((chat) => (
+                  <Button
+                    key={chat.id}
+                    variant="ghost"
+                    className="w-full justify-start"
+                    onClick={() => handleLoadChat(chat.id)}
+                  >
+                    <div className="flex flex-col items-start">
+                      <span className="text-sm font-medium">
+                        {new Date(chat.createdAt).toLocaleString()}
+                      </span>
+                      <span className="text-xs text-muted-foreground truncate">
+                        {chat.lastMessage}
+                      </span>
+                    </div>
+                  </Button>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={showJoinDialog} onOpenChange={setShowJoinDialog}>
         <DialogContent>
@@ -355,6 +471,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           </div>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }
