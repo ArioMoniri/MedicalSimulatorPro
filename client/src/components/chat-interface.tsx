@@ -82,10 +82,17 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       return response.json();
     },
     onSuccess: (data) => {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.content },
-      ]);
+      const contentParts = data.content.split('---').map(part => part.trim());
+
+      contentParts.forEach(part => {
+        setMessages(prev => [
+          ...prev,
+          { 
+            role: "assistant", 
+            content: part.replace(/\n/g, '<br />')
+          }
+        ]);
+      });
     },
     onError: (error: Error) => {
       toast({
@@ -247,7 +254,12 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                     {message.username}
                   </div>
                 )}
-                {message.content}
+                 <div 
+                  className="prose prose-sm max-w-none dark:prose-invert"
+                  dangerouslySetInnerHTML={{ 
+                    __html: message.content 
+                  }} 
+                />
               </div>
             </div>
           ))}
