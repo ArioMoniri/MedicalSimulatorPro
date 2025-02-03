@@ -185,29 +185,21 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         JSON.stringify(chatData)
       );
 
-      // Update history list
+      // Update history list, preventing duplicates
       const firstMessage = messages[0].content;
       const lastMessage = messages[messages.length - 1].content;
-      const updatedHistory = chatHistory.map(chat => 
-        chat.id === currentChatId 
-          ? { 
-              ...chat, 
-              firstMessage: firstMessage.substring(0, 100) + "...",
-              lastMessage: lastMessage.substring(0, 100) + "..."
-            }
-          : chat
-      );
+      let updatedHistory = chatHistory.filter(chat => chat.id !== currentChatId);
 
-      if (!chatHistory.some(chat => chat.id === currentChatId)) {
-        updatedHistory.unshift({
-          id: currentChatId,
-          threadId: threadId || '',
-          messages,
-          createdAt: new Date(),
-          firstMessage: firstMessage.substring(0, 100) + "...",
-          lastMessage: lastMessage.substring(0, 100) + "..."
-        });
-      }
+      const newChat = {
+        id: currentChatId,
+        threadId: threadId || '',
+        messages,
+        createdAt: new Date(),
+        firstMessage: firstMessage.substring(0, 100) + "...",
+        lastMessage: lastMessage.substring(0, 100) + "..."
+      };
+
+      updatedHistory = [newChat, ...updatedHistory];
 
       setChatHistory(updatedHistory);
       localStorage.setItem(
@@ -221,7 +213,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         currentChatId
       );
     }
-  }, [messages, currentChatId, user?.id, scenarioId, threadId]);
+  }, [messages, currentChatId, user?.id, scenarioId, threadId, chatHistory]);
+
 
   // Create thread mutation
   const createThreadMutation = useMutation({
@@ -307,8 +300,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       if (cleanContent) {
         setMessages(prev => [
           ...prev,
-          { 
-            role: "assistant", 
+          {
+            role: "assistant",
             content: cleanContent
           }
         ]);

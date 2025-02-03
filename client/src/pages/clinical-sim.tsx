@@ -3,7 +3,6 @@ import ChatInterface from "@/components/chat-interface";
 import ResourceViewer from "@/components/resource-viewer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle } from "lucide-react";
 import MedicalTranslator from "@/components/medical-translator";
 
@@ -21,6 +20,9 @@ export default function ClinicalSim() {
     );
   }
 
+  // Use first clinical scenario by default
+  const activeScenario = clinicalScenarios[0];
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -33,30 +35,12 @@ export default function ClinicalSim() {
             <CardTitle>Patient Consultation</CardTitle>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue={clinicalScenarios[0]?.id.toString()}>
-              <TabsList className="w-full">
-                {clinicalScenarios.map(scenario => (
-                  <TabsTrigger 
-                    key={scenario.id} 
-                    value={scenario.id.toString()}
-                  >
-                    {scenario.title}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-
-              {clinicalScenarios.map(scenario => (
-                <TabsContent key={scenario.id} value={scenario.id.toString()}>
-                  <div className="space-y-4">
-                    <div className="prose max-w-none">
-                      <h3>{scenario.title}</h3>
-                      <p>{scenario.description}</p>
-                    </div>
-                    <ChatInterface scenarioId={scenario.id} />
-                  </div>
-                </TabsContent>
-              ))}
-            </Tabs>
+            <div className="space-y-4">
+              <div className="prose max-w-none dark:prose-invert">
+                <p>{activeScenario.description}</p>
+              </div>
+              <ChatInterface scenarioId={activeScenario.id} />
+            </div>
           </CardContent>
         </Card>
 
