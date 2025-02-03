@@ -6,11 +6,16 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import MedicalTranslator from "@/components/medical-translator";
 import ATLSGuidelines from "@/components/atls-guidelines";
+import GamifiedProgress from "@/components/gamified-progress";
 
 export default function EmergencySim() {
   const { scenarios, progress } = useSimulator();
 
   const emergencyScenarios = scenarios?.filter(s => s.type === "emergency") || [];
+  const emergencyProgress = progress?.filter(p => {
+    const scenario = scenarios?.find(s => s.id === p.scenarioId);
+    return scenario?.type === "emergency";
+  }) || [];
 
   if (!scenarios) {
     return (
@@ -65,28 +70,6 @@ export default function EmergencySim() {
               <ResourceViewer category="emergency" />
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Your Progress</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {progress?.map(p => {
-                  const scenario = scenarios.find(s => s.id === p.scenarioId);
-                  if (!scenario || scenario.type !== "emergency") return null;
-                  return (
-                    <div key={p.id} className="flex justify-between items-center">
-                      <span>{scenario.title}</span>
-                      <span className="text-sm text-muted-foreground">
-                        Score: {p.score}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* ATLS Guidelines Section - Full Width Below */}
@@ -96,6 +79,16 @@ export default function EmergencySim() {
           </CardHeader>
           <CardContent>
             <ATLSGuidelines />
+          </CardContent>
+        </Card>
+
+        {/* Progress Dashboard */}
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle>Your Progress Dashboard</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <GamifiedProgress progress={emergencyProgress} type="emergency" />
           </CardContent>
         </Card>
       </div>

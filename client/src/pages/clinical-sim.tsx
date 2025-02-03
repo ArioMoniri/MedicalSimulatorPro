@@ -5,11 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import MedicalTranslator from "@/components/medical-translator";
+import GamifiedProgress from "@/components/gamified-progress";
 
 export default function ClinicalSim() {
   const { scenarios, progress } = useSimulator();
 
   const clinicalScenarios = scenarios?.filter(s => s.type === "clinical") || [];
+  const clinicalProgress = progress?.filter(p => {
+    const scenario = scenarios?.find(s => s.id === p.scenarioId);
+    return scenario?.type === "clinical";
+  }) || [];
 
   if (!scenarios) {
     return (
@@ -62,30 +67,17 @@ export default function ClinicalSim() {
               <ResourceViewer category="clinical" />
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Your Progress</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="space-y-2">
-                {progress?.map(p => {
-                  const scenario = scenarios.find(s => s.id === p.scenarioId);
-                  if (!scenario || scenario.type !== "clinical") return null;
-                  return (
-                    <div key={p.id} className="flex justify-between items-center">
-                      <span>{scenario.title}</span>
-                      <span className="text-sm text-muted-foreground">
-                        Score: {p.score}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Your Progress Dashboard</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <GamifiedProgress progress={clinicalProgress} type="clinical" />
+        </CardContent>
+      </Card>
     </div>
   );
 }
