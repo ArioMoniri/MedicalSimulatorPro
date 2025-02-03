@@ -23,34 +23,38 @@ import ReactMarkdown from 'react-markdown';
 
 const parseVitalSigns = (content: string): VitalSigns | null => {
   // Look for vital signs block in API response
-  const vitalsMatch = content.match(/Vital Signs Monitor:\s*\n\n([\s\S]*?)(?:\n\n|$)/);
+  const vitalsMatch = content.match(/Vital Signs Monitor:\s*(.*?)(?:\n|$)/);
   if (!vitalsMatch) return null;
 
   const vitalsBlock = vitalsMatch[1];
+  console.log("Found vitals block:", vitalsBlock); // Debug log
 
-  const hrMatch = vitalsBlock.match(/HR:\s*(\d+)\s*bpm/);
-  const bpMatch = vitalsBlock.match(/BP:\s*(\d+)\/(\d+)\s*mmHg/);
-  const rrMatch = vitalsBlock.match(/RR:\s*(\d+)/);
-  const spo2Match = vitalsBlock.match(/SpO₂:\s*(\d+)%/);
-  const tempMatch = vitalsBlock.match(/Temp:\s*([\d.]+)°C/);
-
-  if (!hrMatch && !bpMatch && !rrMatch && !spo2Match && !tempMatch) {
-    return null;
-  }
+  // Split by pipe and trim each part
+  const vitalParts = vitalsBlock.split('|').map(part => part.trim());
+  console.log("Vital parts:", vitalParts); // Debug log
 
   const vitals: VitalSigns = {};
 
-  if (hrMatch) vitals.hr = parseInt(hrMatch[1]);
-  if (bpMatch) vitals.bp = { systolic: parseInt(bpMatch[1]), diastolic: parseInt(bpMatch[2]) };
-  if (rrMatch) vitals.rr = parseInt(rrMatch[1]);
-  if (spo2Match) vitals.spo2 = parseInt(spo2Match[1]);
-  if (tempMatch) vitals.temp = parseFloat(tempMatch[1]);
+  vitalParts.forEach(part => {
+    const hrMatch = part.match(/HR:\s*(\d+)\s*bpm/);
+    const bpMatch = part.match(/BP:\s*(\d+)\/(\d+)\s*mmHg/);
+    const rrMatch = part.match(/RR:\s*(\d+)/);
+    const spo2Match = part.match(/SpO[₂2]?:\s*(\d+)%/); // Handle both SpO₂ and SpO2
+    const tempMatch = part.match(/Temp:\s*([\d.]+)°?C/); // Make ° optional
 
-  return vitals;
+    if (hrMatch) vitals.hr = parseInt(hrMatch[1]);
+    if (bpMatch) vitals.bp = { systolic: parseInt(bpMatch[1]), diastolic: parseInt(bpMatch[2]) };
+    if (rrMatch) vitals.rr = parseInt(rrMatch[1]);
+    if (spo2Match) vitals.spo2 = parseInt(spo2Match[1]);
+    if (tempMatch) vitals.temp = parseFloat(tempMatch[1]);
+  });
+
+  console.log("Parsed vitals:", vitals); // Debug log
+  return Object.keys(vitals).length > 0 ? vitals : null;
 };
 
 const removeVitalSignsBlock = (content: string): string => {
-  return content.replace(/Vital Signs Monitor:\n\n[\s\S]*?(?:\n\n|$)/, '').trim();
+  return content.replace(/Vital Signs Monitor:.*?(?:\n|$)/, '').trim();
 };
 
 interface Message {
@@ -208,26 +212,27 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       return response.json();
     },
     onSuccess: (data) => {
-      // Split response by "---" if present, otherwise treat as single message
-      const contentParts = data.content.split('---').map((part: string) => part.trim());
+      const content = data.content;
+      console.log("Received message:", content); // Debug log
 
-      contentParts.forEach((part: string) => {
-        const vitals = parseVitalSigns(part);
-        if (vitals) {
-          console.log("Updating vitals:", vitals); // Debug log
-          setLatestVitals(vitals);
-        }
-        const cleanContent = removeVitalSignsBlock(part);
-        if (cleanContent) {
-          setMessages(prev => [
-            ...prev,
-            { 
-              role: "assistant", 
-              content: cleanContent
-            }
-          ]);
-        }
-      });
+      // Check for vital signs in the message
+      const vitals = parseVitalSigns(content);
+      if (vitals) {
+        console.log("Updating vitals from new message:", vitals); // Debug log
+        setLatestVitals(vitals); // Direct update instead of merging
+      }
+
+      // Add message to chat
+      const cleanContent = removeVitalSignsBlock(content);
+      if (cleanContent) {
+        setMessages(prev => [
+          ...prev,
+          { 
+            role: "assistant", 
+            content: cleanContent
+          }
+        ]);
+      }
       setIsTyping(false);
     },
     onError: (error: Error) => {
