@@ -22,49 +22,64 @@ import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
 
 const parseVitalSigns = (content: string): VitalSigns | null => {
-  console.log("Attempting to parse vital signs from:", content); // Debug log
+  console.log("Attempting to parse vital signs from:", content);
 
-  // Look for vital signs in various formats
-  const hrMatch = content.match(/(?:HR|Heart Rate|Pulse):\s*(\d+)(?:\s*(?:bpm|beats\/min|\/min))?/i);
-  const bpMatch = content.match(/(?:BP|Blood Pressure):\s*(\d+)\/(\d+)(?:\s*(?:mmHg|mm Hg))?/i);
-  const rrMatch = content.match(/(?:RR|Respiratory Rate|Resp):\s*(\d+)(?:\s*(?:breaths\/min|\/min))?/i);
-  const spo2Match = content.match(/(?:SpO2|O2 Sat|Oxygen|SaO2):\s*(\d+)(?:\s*%)?/i);
-  const tempMatch = content.match(/(?:Temp|Temperature):\s*([\d.]+)(?:\s*[°]?C|[°]?F)?/i);
+  // Try to find the "Vital Signs Monitor:" section first
+  const vitalSignsBlockMatch = content.match(/Vital Signs Monitor:\s*([\s\S]*?)(?:\n\n|\n(?=[A-Z])|$)/i);
+  let textToSearch = vitalSignsBlockMatch ? vitalSignsBlockMatch[1] : content;
 
-  if (!hrMatch && !bpMatch && !rrMatch && !spo2Match && !tempMatch) {
-    console.log("No vital signs found in content"); // Debug log
-    return null;
-  }
+  // Clean up the text and split into lines
+  const lines = textToSearch.split('\n').map(line => line.trim()).filter(Boolean);
+  console.log("Lines to parse:", lines);
 
   const vitals: VitalSigns = {};
 
-  if (hrMatch) {
-    vitals.hr = parseInt(hrMatch[1]);
-    console.log("Found HR:", vitals.hr);
-  }
+  // Helper function to find value in a line
+  const findValue = (line: string, key: string): string | null => {
+    const match = line.match(new RegExp(`${key}:?\\s*([\\d./]+)(?:\\s*(?:bpm|mmHg|%|°C|°F|/min))?`, 'i'));
+    return match ? match[1] : null;
+  };
 
-  if (bpMatch) {
-    vitals.bp = {
-      systolic: parseInt(bpMatch[1]),
-      diastolic: parseInt(bpMatch[2])
-    };
-    console.log("Found BP:", vitals.bp);
-  }
+  // Process each line
+  lines.forEach(line => {
+    // Check for HR
+    const hrValue = findValue(line, 'HR|Heart Rate|Pulse');
+    if (hrValue) {
+      vitals.hr = parseInt(hrValue);
+      console.log("Found HR:", vitals.hr);
+    }
 
-  if (rrMatch) {
-    vitals.rr = parseInt(rrMatch[1]);
-    console.log("Found RR:", vitals.rr);
-  }
+    // Check for BP
+    const bpMatch = line.match(/(?:BP|Blood Pressure):?\s*(\d+)\/(\d+)/i);
+    if (bpMatch) {
+      vitals.bp = {
+        systolic: parseInt(bpMatch[1]),
+        diastolic: parseInt(bpMatch[2])
+      };
+      console.log("Found BP:", vitals.bp);
+    }
 
-  if (spo2Match) {
-    vitals.spo2 = parseInt(spo2Match[1]);
-    console.log("Found SpO2:", vitals.spo2);
-  }
+    // Check for RR
+    const rrValue = findValue(line, 'RR|Respiratory Rate|Resp');
+    if (rrValue) {
+      vitals.rr = parseInt(rrValue);
+      console.log("Found RR:", vitals.rr);
+    }
 
-  if (tempMatch) {
-    vitals.temp = parseFloat(tempMatch[1]);
-    console.log("Found Temp:", vitals.temp);
-  }
+    // Check for SpO2
+    const spo2Value = findValue(line, 'SpO2|O2 Sat|Oxygen|SaO2');
+    if (spo2Value) {
+      vitals.spo2 = parseInt(spo2Value);
+      console.log("Found SpO2:", vitals.spo2);
+    }
+
+    // Check for Temp
+    const tempValue = findValue(line, 'Temp|Temperature');
+    if (tempValue) {
+      vitals.temp = parseFloat(tempValue);
+      console.log("Found Temp:", vitals.temp);
+    }
+  });
 
   console.log("Final parsed vitals:", vitals);
   return Object.keys(vitals).length > 0 ? vitals : null;
@@ -296,10 +311,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       const vitals = parseVitalSigns(content);
       if (vitals) {
         console.log("Found new vitals:", vitals);
-        setLatestVitals(prevVitals => ({
-          ...prevVitals,
-          ...vitals
-        }));
+        setLatestVitals(vitals); // Replace entirely instead of merging
 
         if (threadId) {
           saveVitalSignsMutation.mutate({
@@ -316,7 +328,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         updateProgress.mutate({
           scenarioId,
           score,
-          threadId: threadId!
+          threadId: threadId!,
+          feedback: content // Include the feedback text
         });
       }
 
@@ -325,7 +338,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         ...prev,
         {
           role: "assistant",
-          content: content
+          content: content,
         }
       ]);
       setIsTyping(false);
@@ -338,12 +351,11 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         description: error.message,
       });
     },
-  });
-
+});
 
   // Add mutation for updating progress
   const updateProgress = useMutation({
-    mutationFn: async (data: { scenarioId: number; score: number; threadId: string }) => {
+    mutationFn: async (data: { scenarioId: number; score: number; threadId: string, feedback: string }) => {
       const response = await fetch("/api/progress", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

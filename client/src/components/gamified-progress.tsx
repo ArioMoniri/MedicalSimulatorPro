@@ -16,7 +16,8 @@ interface ProgressData {
   id: number;
   scenarioId: number;
   score: number;
-  completedAt: string;
+  completedAt: string | Date | null;
+  feedback?: string | null;
 }
 
 interface Achievement {
@@ -44,7 +45,7 @@ export default function GamifiedProgress({ progress, type }: GamifiedProgressPro
       const scores = progress.map(p => p.score);
       const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
       const max = Math.max(...scores);
-      
+
       setAverageScore(avg);
       setHighestScore(max);
 
@@ -90,9 +91,9 @@ export default function GamifiedProgress({ progress, type }: GamifiedProgressPro
     }
   }, [progress]);
 
-  // Prepare chart data
+  // Prepare chart data - handle both string and Date objects for completedAt
   const chartData = progress.map(p => ({
-    date: new Date(p.completedAt).toLocaleDateString(),
+    date: p.completedAt ? new Date(p.completedAt).toLocaleDateString() : 'Unknown Date',
     score: p.score
   }));
 
@@ -106,11 +107,7 @@ export default function GamifiedProgress({ progress, type }: GamifiedProgressPro
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{averageScore.toFixed(1)}</div>
-            <Progress 
-              value={averageScore} 
-              className="mt-2"
-              indicatorClassName={averageScore >= 90 ? "bg-green-500" : ""}
-            />
+            <Progress value={averageScore} className="mt-2" />
           </CardContent>
         </Card>
 
@@ -121,11 +118,7 @@ export default function GamifiedProgress({ progress, type }: GamifiedProgressPro
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{highestScore}</div>
-            <Progress 
-              value={highestScore} 
-              className="mt-2"
-              indicatorClassName={highestScore >= 90 ? "bg-green-500" : ""}
-            />
+            <Progress value={highestScore} className="mt-2" />
           </CardContent>
         </Card>
 
@@ -151,10 +144,7 @@ export default function GamifiedProgress({ progress, type }: GamifiedProgressPro
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="date" 
-                tickFormatter={(value) => new Date(value).toLocaleDateString()}
-              />
+              <XAxis dataKey="date" />
               <YAxis domain={[0, 100]} />
               <Tooltip />
               <Line
