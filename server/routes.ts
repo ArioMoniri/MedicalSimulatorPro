@@ -8,6 +8,10 @@ import { eq, desc, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { translateMedicalTerm, getATLSGuidelines } from "./services/openai";
 import { createThread, sendMessage } from "./services/assistant-service";
+import multer from 'multer';
+import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
+import fs from 'fs/promises';
 
 export function registerRoutes(app: Express): Server {
   // Setup authentication first
@@ -297,6 +301,72 @@ export function registerRoutes(app: Express): Server {
         res.status(500).json({ message: "Failed to get vital signs history" });
       }
     });
+
+
+  // Configure multer for image uploads
+  const storage = multer.diskStorage({
+    destination: './uploads',
+    filename: function (req, file, cb) {
+      cb(null, `${uuidv4()}${path.extname(file.originalname)}`);
+    }
+  });
+
+  const upload = multer({ 
+    storage,
+    limits: {
+      fileSize: 5 * 1024 * 1024 // 5MB limit
+    },
+    fileFilter: (req, file, cb) => {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+      if (!allowedTypes.includes(file.mimetype)) {
+        cb(new Error('Invalid file type'));
+        return;
+      }
+      cb(null, true);
+    }
+  });
+
+  // Image upload endpoint
+  app.post("/api/assistant/upload-image", upload.single('image'), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No image file provided" });
+      }
+
+      if (!req.body.threadId) {
+        return res.status(400).json({ message: "Thread ID is required" });
+      }
+
+      // Read the uploaded file
+      const imageBuffer = await fs.readFile(req.file.path);
+      const base64Image = imageBuffer.toString('base64');
+
+      // Send image to OpenAI API
+      const response = await sendMessage(
+        [
+          {
+            type: "text",
+            text: "Please analyze this medical image and provide your observations."
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:${req.file.mimetype};base64,${base64Image}`
+            }
+          }
+        ],
+        req.body.threadId
+      );
+
+      // Clean up the uploaded file
+      await fs.unlink(req.file.path);
+
+      res.json(response);
+    } catch (error) {
+      console.error("Image upload error:", error);
+      res.status(500).json({ message: "Failed to process image" });
+    }
+  });
 
   const httpServer = createServer(app);
   setupWebSocket(httpServer);

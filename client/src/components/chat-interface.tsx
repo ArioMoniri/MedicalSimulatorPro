@@ -468,15 +468,81 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     }
   };
 
-  const handleVoiceInput = (transcript: string) => {
+  const handleVoiceInput = async (transcript: string) => {
+    if (!transcript.trim()) return;
     setInput(transcript);
+
+    // Automatically send the voice transcript
+    const newMessage: Message = {
+      role: "user",
+      content: transcript,
+      username: user?.username,
+      createdAt: new Date(),
+    };
+
+    setMessages([...messages, newMessage]);
+    setInput("");
+
+    if (roomId && isConnected) {
+      sendRoomMessage(transcript);
+    } else if (threadId) {
+      sendMessageMutation.mutate(transcript);
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    console.log("Image upload:", file);
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Image size should be less than 5MB"
+      });
+      return;
+    }
+
+    // Create FormData
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('threadId', threadId || '');
+
+    try {
+      const response = await fetch('/api/assistant/upload-image', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload image');
+      }
+
+      const data = await response.json();
+
+      // Add image message to chat
+      const newMessage: Message = {
+        role: "user",
+        content: `[Image uploaded: ${file.name}]`,
+        username: user?.username,
+        createdAt: new Date(),
+      };
+
+      setMessages([...messages, newMessage]);
+
+      // Process assistant response
+      if (threadId) {
+        sendMessageMutation.mutate(`I've uploaded an image named ${file.name}. Please analyze it.`);
+      }
+
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message
+      });
+    }
   };
 
   return (
