@@ -39,7 +39,6 @@ interface VitalSignsMonitorProps {
 
 const HeartBeatPulse = ({ heartRate }: { heartRate?: number }) => {
   const duration = heartRate ? 60 / heartRate : 1;
-
   return (
     <div className="relative h-8 w-8">
       <motion.div
@@ -60,7 +59,6 @@ const HeartBeatPulse = ({ heartRate }: { heartRate?: number }) => {
 
 const BreathingWave = ({ respiratoryRate }: { respiratoryRate?: number }) => {
   const duration = respiratoryRate ? 60 / respiratoryRate : 3;
-
   return (
     <motion.div
       className="h-8 w-16 bg-blue-500"
@@ -100,6 +98,7 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
     rr: number[];
     spo2: number[];
     temp: number[];
+    labels: string[];
   }>({
     hr: [],
     systolic: [],
@@ -107,27 +106,39 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
     rr: [],
     spo2: [],
     temp: [],
+    labels: [],
   });
 
   useEffect(() => {
-    if (latestVitals) {
-      setVitalsHistory(prev => ({
-        hr: [...prev.hr, latestVitals.hr || prev.hr[prev.hr.length - 1] || 0].slice(-20),
-        systolic: [...prev.systolic, latestVitals.bp?.systolic || prev.systolic[prev.systolic.length - 1] || 0].slice(-20),
-        diastolic: [...prev.diastolic, latestVitals.bp?.diastolic || prev.diastolic[prev.diastolic.length - 1] || 0].slice(-20),
-        rr: [...prev.rr, latestVitals.rr || prev.rr[prev.rr.length - 1] || 0].slice(-20),
-        spo2: [...prev.spo2, latestVitals.spo2 || prev.spo2[prev.spo2.length - 1] || 0].slice(-20),
-        temp: [...prev.temp, latestVitals.temp || prev.temp[prev.temp.length - 1] || 0].slice(-20),
-      }));
+    if (latestVitals && Object.keys(latestVitals).length > 0) {
+      const currentTime = new Date().toLocaleTimeString();
+
+      setVitalsHistory(prev => {
+        const newHistory = {
+          hr: [...prev.hr, latestVitals.hr ?? prev.hr[prev.hr.length - 1] ?? 0].slice(-20),
+          systolic: [...prev.systolic, latestVitals.bp?.systolic ?? prev.systolic[prev.systolic.length - 1] ?? 0].slice(-20),
+          diastolic: [...prev.diastolic, latestVitals.bp?.diastolic ?? prev.diastolic[prev.diastolic.length - 1] ?? 0].slice(-20),
+          rr: [...prev.rr, latestVitals.rr ?? prev.rr[prev.rr.length - 1] ?? 0].slice(-20),
+          spo2: [...prev.spo2, latestVitals.spo2 ?? prev.spo2[prev.spo2.length - 1] ?? 0].slice(-20),
+          temp: [...prev.temp, latestVitals.temp ?? prev.temp[prev.temp.length - 1] ?? 0].slice(-20),
+          labels: [...prev.labels, currentTime].slice(-20),
+        };
+
+        const hasChanges = Object.entries(newHistory).some(([key, value]) => {
+          if (key === 'labels') return false;
+          return value[value.length - 1] !== (prev as any)[key][prev[key as keyof typeof prev].length - 1];
+        });
+
+        return hasChanges ? newHistory : prev;
+      });
     }
   }, [latestVitals]);
 
   const options: ChartOptions<'line'> = {
     responsive: true,
     maintainAspectRatio: false,
-    interaction: {
-      mode: 'index' as const,
-      intersect: false,
+    animation: {
+      duration: 750,
     },
     scales: {
       y: {
@@ -144,6 +155,8 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         },
         ticks: {
           color: 'rgba(255, 255, 255, 0.8)',
+          maxRotation: 45,
+          minRotation: 45,
         }
       }
     },
@@ -152,63 +165,64 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         labels: {
           color: 'rgba(255, 255, 255, 0.8)',
         }
-      }
-    },
-    animation: {
-      duration: 750,
+      },
+      tooltip: {
+        mode: 'index',
+        intersect: false,
+      },
     },
   };
 
-  const data: ChartData<'line'> = {
-    labels: Array.from({ length: vitalsHistory.hr.length }, (_, i) => i + 1),
+  const primaryData: ChartData<'line'> = {
+    labels: vitalsHistory.labels,
     datasets: [
       {
         label: 'Heart Rate (bpm)',
         data: vitalsHistory.hr,
         borderColor: 'rgb(255, 99, 132)',
         backgroundColor: 'rgba(255, 99, 132, 0.5)',
-        yAxisID: 'y',
+        tension: 0.2,
       },
       {
         label: 'BP Systolic (mmHg)',
         data: vitalsHistory.systolic,
         borderColor: 'rgb(53, 162, 235)',
         backgroundColor: 'rgba(53, 162, 235, 0.5)',
-        yAxisID: 'y',
+        tension: 0.2,
       },
       {
         label: 'BP Diastolic (mmHg)',
         data: vitalsHistory.diastolic,
         borderColor: 'rgb(75, 192, 192)',
         backgroundColor: 'rgba(75, 192, 192, 0.5)',
-        yAxisID: 'y',
+        tension: 0.2,
       },
     ],
   };
 
   const secondaryData: ChartData<'line'> = {
-    labels: Array.from({ length: vitalsHistory.rr.length }, (_, i) => i + 1),
+    labels: vitalsHistory.labels,
     datasets: [
       {
-        label: 'Respiratory Rate',
+        label: 'Respiratory Rate (breaths/min)',
         data: vitalsHistory.rr,
         borderColor: 'rgb(255, 159, 64)',
         backgroundColor: 'rgba(255, 159, 64, 0.5)',
-        yAxisID: 'y',
+        tension: 0.2,
       },
       {
         label: 'SpO2 (%)',
         data: vitalsHistory.spo2,
         borderColor: 'rgb(153, 102, 255)',
         backgroundColor: 'rgba(153, 102, 255, 0.5)',
-        yAxisID: 'y',
+        tension: 0.2,
       },
       {
         label: 'Temperature (°C)',
         data: vitalsHistory.temp,
         borderColor: 'rgb(255, 205, 86)',
         backgroundColor: 'rgba(255, 205, 86, 0.5)',
-        yAxisID: 'y',
+        tension: 0.2,
       },
     ],
   };
@@ -226,24 +240,57 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
               <div className="flex items-center space-x-3">
                 <HeartBeatPulse heartRate={latestVitals.hr} />
                 <div className="space-y-1">
-                  <span className="font-mono text-2xl tracking-wider">{latestVitals.hr || '--'}</span>
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      key={latestVitals.hr || 'no-hr'}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="font-mono text-2xl tracking-wider"
+                    >
+                      {latestVitals.hr || '--'}
+                    </motion.span>
+                  </AnimatePresence>
                   <span className="block text-xs text-gray-400">BPM</span>
                 </div>
               </div>
+
               <div className="flex items-center space-x-3">
                 <BreathingWave respiratoryRate={latestVitals.rr} />
                 <div className="space-y-1">
-                  <span className="font-mono text-2xl tracking-wider">{latestVitals.rr || '--'}</span>
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      key={latestVitals.rr || 'no-rr'}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="font-mono text-2xl tracking-wider"
+                    >
+                      {latestVitals.rr || '--'}
+                    </motion.span>
+                  </AnimatePresence>
                   <span className="block text-xs text-gray-400">RR/min</span>
                 </div>
               </div>
+
               <div className="flex items-center space-x-3">
                 <SpO2Pulse value={latestVitals.spo2} />
                 <div className="space-y-1">
-                  <span className="font-mono text-2xl tracking-wider">{latestVitals.spo2 || '--'}</span>
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      key={latestVitals.spo2 || 'no-spo2'}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="font-mono text-2xl tracking-wider"
+                    >
+                      {latestVitals.spo2 || '--'}
+                    </motion.span>
+                  </AnimatePresence>
                   <span className="block text-xs text-gray-400">SpO₂ %</span>
                 </div>
               </div>
+
               <div className="flex items-center space-x-3">
                 <motion.div 
                   className="h-8 w-8 flex items-center justify-center rounded-full border border-blue-500"
@@ -253,13 +300,17 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
                   <span className="text-xs text-blue-500">BP</span>
                 </motion.div>
                 <div className="space-y-1">
-                  <motion.span 
-                    className="font-mono text-2xl tracking-wider"
-                    animate={{ opacity: [1, 0.7, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  >
-                    {latestVitals.bp ? `${latestVitals.bp.systolic}/${latestVitals.bp.diastolic}` : '--/--'}
-                  </motion.span>
+                  <AnimatePresence mode="wait">
+                    <motion.span 
+                      key={`${latestVitals.bp?.systolic || 'no-bp'}-${latestVitals.bp?.diastolic || 'no-bp'}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="font-mono text-2xl tracking-wider"
+                    >
+                      {latestVitals.bp ? `${latestVitals.bp.systolic}/${latestVitals.bp.diastolic}` : '--/--'}
+                    </motion.span>
+                  </AnimatePresence>
                   <span className="block text-xs text-gray-400">mmHg</span>
                 </div>
               </div>
@@ -267,7 +318,7 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
 
             {/* Primary Vitals Chart */}
             <div className="h-[250px] bg-black rounded-lg border border-gray-800 p-4">
-              <Line options={options} data={data} />
+              <Line options={options} data={primaryData} />
             </div>
           </div>
 
@@ -280,21 +331,33 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
               <div className="p-4 bg-black rounded-lg border border-gray-800">
                 <div className="space-y-2">
                   <span className="text-sm text-gray-400">Temperature</span>
-                  <motion.div 
-                    className="font-mono text-2xl tracking-wider"
-                    animate={{ scale: [1, 1.02, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  >
-                    {latestVitals.temp?.toFixed(1) || '--'}°C
-                  </motion.div>
+                  <AnimatePresence mode="wait">
+                    <motion.div 
+                      key={latestVitals.temp || 'no-temp'}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="font-mono text-2xl tracking-wider"
+                    >
+                      {latestVitals.temp?.toFixed(1) || '--'}°C
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
               </div>
               <div className="p-4 bg-black rounded-lg border border-gray-800">
                 <div className="space-y-2">
                   <span className="text-sm text-gray-400">SpO₂ Trend</span>
-                  <div className="font-mono text-2xl tracking-wider">
-                    {latestVitals.spo2 || '--'}%
-                  </div>
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={latestVitals.spo2 || 'no-spo2'}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="font-mono text-2xl tracking-wider"
+                    >
+                      {latestVitals.spo2 || '--'}%
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
               </div>
             </div>

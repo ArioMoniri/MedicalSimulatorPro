@@ -22,25 +22,48 @@ import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
 
 const parseVitalSigns = (content: string): VitalSigns | null => {
-  // Look for vital signs block in API response
-  const vitalsMatch = content.match(/Vital Signs Monitor:\s*(.*?)(?:\n|$)/);
-  if (!vitalsMatch) return null;
+  // First try to find a structured vital signs block
+  const vitalsBlockMatch = content.match(/(?:Vital Signs:|Vitals:|Vital Signs Monitor:)([\s\S]*?)(?:\n\n|\n(?=[A-Za-z])|$)/i);
 
-  const vitalsBlock = vitalsMatch[1];
-  console.log("Found vitals block:", vitalsBlock); // Debug log
+  if (!vitalsBlockMatch) {
+    // Try to find individual vital signs anywhere in the text
+    const vitals: VitalSigns = {};
 
-  // Split by pipe and trim each part
-  const vitalParts = vitalsBlock.split('|').map(part => part.trim());
-  console.log("Vital parts:", vitalParts); // Debug log
+    // Match various HR formats
+    const hrMatch = content.match(/(?:HR|Heart Rate):\s*(\d+)(?:\s*(?:bpm|beats\/min))?/i);
+    if (hrMatch) vitals.hr = parseInt(hrMatch[1]);
 
+    // Match BP with various formats
+    const bpMatch = content.match(/(?:BP|Blood Pressure):\s*(\d+)\/(\d+)(?:\s*mmHg)?/i);
+    if (bpMatch) vitals.bp = { systolic: parseInt(bpMatch[1]), diastolic: parseInt(bpMatch[2]) };
+
+    // Match RR with various formats
+    const rrMatch = content.match(/(?:RR|Respiratory Rate):\s*(\d+)(?:\s*(?:breaths\/min|\/min))?/i);
+    if (rrMatch) vitals.rr = parseInt(rrMatch[1]);
+
+    // Match SpO2 with various formats and symbols
+    const spo2Match = content.match(/(?:SpO₂|SpO2|O2 Sat|Oxygen Saturation):\s*(\d+)%/i);
+    if (spo2Match) vitals.spo2 = parseInt(spo2Match[1]);
+
+    // Match temperature with various formats
+    const tempMatch = content.match(/(?:Temp|Temperature):\s*([\d.]+)°?C/i);
+    if (tempMatch) vitals.temp = parseFloat(tempMatch[1]);
+
+    return Object.keys(vitals).length > 0 ? vitals : null;
+  }
+
+  const vitalsText = vitalsBlockMatch[1];
   const vitals: VitalSigns = {};
 
-  vitalParts.forEach(part => {
-    const hrMatch = part.match(/HR:\s*(\d+)\s*bpm/);
-    const bpMatch = part.match(/BP:\s*(\d+)\/(\d+)\s*mmHg/);
-    const rrMatch = part.match(/RR:\s*(\d+)/);
-    const spo2Match = part.match(/SpO[₂2]?:\s*(\d+)%/); // Handle both SpO₂ and SpO2
-    const tempMatch = part.match(/Temp:\s*([\d.]+)°?C/); // Make ° optional
+  // Parse individual vital signs within the block
+  vitalsText.split(/[|,\n]/).forEach(part => {
+    const cleaned = part.trim();
+
+    const hrMatch = cleaned.match(/(?:HR|Heart Rate):\s*(\d+)(?:\s*(?:bpm|beats\/min))?/i);
+    const bpMatch = cleaned.match(/(?:BP|Blood Pressure):\s*(\d+)\/(\d+)(?:\s*mmHg)?/i);
+    const rrMatch = cleaned.match(/(?:RR|Respiratory Rate):\s*(\d+)(?:\s*(?:breaths\/min|\/min))?/i);
+    const spo2Match = cleaned.match(/(?:SpO₂|SpO2|O2 Sat|Oxygen Saturation):\s*(\d+)%/i);
+    const tempMatch = cleaned.match(/(?:Temp|Temperature):\s*([\d.]+)°?C/i);
 
     if (hrMatch) vitals.hr = parseInt(hrMatch[1]);
     if (bpMatch) vitals.bp = { systolic: parseInt(bpMatch[1]), diastolic: parseInt(bpMatch[2]) };
@@ -49,7 +72,6 @@ const parseVitalSigns = (content: string): VitalSigns | null => {
     if (tempMatch) vitals.temp = parseFloat(tempMatch[1]);
   });
 
-  console.log("Parsed vitals:", vitals); // Debug log
   return Object.keys(vitals).length > 0 ? vitals : null;
 };
 
@@ -307,14 +329,29 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     setChatHistory(prev => [newChat, ...prev]);
   };
 
-    // Update handleLoadChat to load vital signs history
+  // Update handleLoadChat to load vital signs history
   const handleLoadChat = (chatId: string) => {
     setCurrentChatId(chatId);
+    setLatestVitals({}); // Reset vitals before loading chat
     const savedChat = localStorage.getItem(`chat_${user?.id}_${scenarioId}_${chatId}`);
     if (savedChat) {
       const chatData = JSON.parse(savedChat);
       setMessages(chatData.messages);
       setThreadId(chatData.threadId);
+
+      // Parse vital signs from the loaded messages
+      const lastMessageWithVitals = [...chatData.messages].reverse()
+        .find(msg => {
+          const vitals = parseVitalSigns(msg.content);
+          return vitals !== null;
+        });
+
+      if (lastMessageWithVitals) {
+        const vitals = parseVitalSigns(lastMessageWithVitals.content);
+        if (vitals) {
+          setLatestVitals(vitals);
+        }
+      }
     }
   };
 
@@ -481,8 +518,23 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                       {message.username}
                     </div>
                   )}
-                  <div className="prose prose-sm max-w-none dark:prose-invert">
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                  <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap break-words">
+                    <ReactMarkdown
+                      components={{
+                        p: ({ children }) => <p className="mb-2">{children}</p>,
+                        ul: ({ children }) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
+                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                        em: ({ children }) => <em className="italic">{children}</em>,
+                        h1: ({ children }) => <h1 className="text-xl font-bold mb-2">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-lg font-bold mb-2">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-base font-bold mb-2">{children}</h3>,
+                        code: ({ children }) => <code className="bg-muted-foreground/10 rounded px-1">{children}</code>,
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
                   </div>
                 </div>
               </div>
