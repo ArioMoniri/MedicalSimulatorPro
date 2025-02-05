@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLocation } from "wouter";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "wouter";
+import { useWelcomeBadge } from "@/context/WelcomeBadgeContext";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -36,6 +37,7 @@ export default function AuthPage() {
   const { login, register } = useUser();
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
+  const { showWelcomeBadge } = useWelcomeBadge();
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -74,6 +76,7 @@ export default function AuthPage() {
             title: "Success",
             description: "Login successful",
           });
+          showWelcomeBadge(data.username);
           setLocation("/");
         }
       } else {
@@ -93,6 +96,7 @@ export default function AuthPage() {
             title: "Success",
             description: "Registration successful",
           });
+          showWelcomeBadge(data.username);
           setLocation("/");
         }
       }
