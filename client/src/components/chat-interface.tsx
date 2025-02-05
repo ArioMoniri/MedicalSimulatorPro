@@ -28,6 +28,7 @@ interface Message {
   content: string;
   username?: string;
   createdAt?: string | Date;
+  isTyping?: boolean;
 }
 
 interface Room {
@@ -369,20 +370,23 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     if (roomMessagesData) {
       // Sort messages by createdAt in ascending order (oldest first)
       const sortedMessages = [...roomMessagesData].sort((a, b) => {
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateA - dateB;
       });
 
-      setMessages(
-        sortedMessages.map((msg) => ({
-          id: msg.id,
-          role: msg.isAssistant ? "assistant" : "user",
-          content: msg.content,
-          createdAt: msg.createdAt,
-          username: msg.isAssistant ? "Medical Assistant" : msg.username || "Unknown User"
-        }))
-      );
+      const newMessages: Message[] = sortedMessages.map((msg) => ({
+        id: msg.id,
+        role: msg.isAssistant ? "assistant" : "user",
+        content: msg.content,
+        createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+        username: msg.username || "Unknown User",
+        isTyping: false
+      }));
+
+      setMessages(newMessages);
     }
-  }, [roomMessagesData, user]);
+  }, [roomMessagesData]);
 
   // Room management functions
   const handleCreateRoom = async () => {
@@ -396,6 +400,16 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           creatorId: room.creatorId,
           endedAt: room.endedAt ? new Date(room.endedAt) : undefined
         });
+
+        // Create new thread for AI interactions
+        const threadResponse = await fetch("/api/assistant/thread", {
+          method: "POST",
+        });
+
+        if (threadResponse.ok) {
+          const thread = await threadResponse.json();
+          setThreadId(thread.id);
+        }
 
         if (user) {
           connectToRoom(room.id, user.id, user.username);
@@ -426,6 +440,16 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           creatorId: room.creatorId,
           endedAt: room.endedAt ? new Date(room.endedAt) : undefined
         });
+
+        // Create new thread for AI interactions
+        const threadResponse = await fetch("/api/assistant/thread", {
+          method: "POST",
+        });
+
+        if (threadResponse.ok) {
+          const thread = await threadResponse.json();
+          setThreadId(thread.id);
+        }
 
         if (user) {
           connectToRoom(room.id, user.id, user.username);
@@ -795,8 +819,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
               <div
                 key={i}
                 className={`flex ${
-                  message.role === "user" && message.username === user?.username 
-                    ? "justify-end" 
+                  message.role === "user" && message.username === user?.username
+                    ? "justify-end"
                     : "justify-start"
                 }`}
               >

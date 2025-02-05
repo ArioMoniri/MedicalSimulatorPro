@@ -1,10 +1,10 @@
 import { WebSocket, WebSocketServer } from "ws";
 import type { Server } from "http";
 import { db } from "@db";
-import { rooms, roomMessages, roomParticipants } from "@db/schema";
+import { rooms as dbRooms, roomMessages, roomParticipants } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import { authenticateWebSocket } from "./auth";
-import { sendMessage, createThread } from "./services/assistant-service"; // Added createThread import
+import { sendMessage, createThread } from "./services/assistant-service";
 
 interface WebSocketMessage {
   type: "join" | "chat" | "leave";
@@ -13,6 +13,7 @@ interface WebSocketMessage {
   username?: string;
   content?: string;
   isAssistant?: boolean;
+  threadId?: string;
 }
 
 interface ConnectedClient extends WebSocket {
@@ -20,7 +21,7 @@ interface ConnectedClient extends WebSocket {
   userId?: number;
   username?: string;
   isAuthenticated?: boolean;
-  threadId?: string; // Added threadId property
+  threadId?: string;
 }
 
 export function setupWebSocket(server: Server) {
@@ -28,19 +29,22 @@ export function setupWebSocket(server: Server) {
     server,
     path: "/api/ws",
     verifyClient: async (info, cb) => {
-      if (info.req.headers['sec-websocket-protocol'] === 'vite-hmr') {
-        return cb(true);
-      }
-
       try {
+        // Skip auth for Vite HMR
+        if (info.req.headers['sec-websocket-protocol'] === 'vite-hmr') {
+          return cb(true);
+        }
+
         const cookies = info.req.headers.cookie;
         if (!cookies) {
-          return cb(false, 401, 'Unauthorized - No cookies');
+          console.error("WebSocket auth failed: No cookies");
+          return cb(false, 401, 'Unauthorized');
         }
 
         const user = await authenticateWebSocket(cookies);
         if (!user) {
-          return cb(false, 401, 'Unauthorized - Invalid session');
+          console.error("WebSocket auth failed: Invalid session");
+          return cb(false, 401, 'Unauthorized');
         }
 
         (info.req as any).user = user;
@@ -52,15 +56,20 @@ export function setupWebSocket(server: Server) {
     }
   });
 
-  const rooms = new Map<number, Set<ConnectedClient>>();
+  // Store connected clients for each room
+  const connectedRooms = new Map<number, Set<ConnectedClient>>();
 
   wss.on("connection", async (ws: ConnectedClient, req) => {
-    ws.isAuthenticated = true;
     const user = (req as any).user;
-    if (user) {
-      ws.userId = user.id;
-      ws.username = user.username;
+    if (!user) {
+      ws.close(1008, 'Unauthorized');
+      return;
     }
+
+    // Set user info on socket
+    ws.isAuthenticated = true;
+    ws.userId = user.id;
+    ws.username = user.username;
 
     const handleMessageError = (error: any, ws: ConnectedClient) => {
       console.error("WebSocket error:", error);
@@ -71,15 +80,15 @@ export function setupWebSocket(server: Server) {
     };
 
     ws.on("message", async (data) => {
-      try {
-        if (!ws.isAuthenticated) {
-          ws.send(JSON.stringify({ 
-            type: "error", 
-            message: "Unauthorized" 
-          }));
-          return;
-        }
+      if (!ws.isAuthenticated) {
+        ws.send(JSON.stringify({ 
+          type: "error", 
+          message: "Unauthorized" 
+        }));
+        return;
+      }
 
+      try {
         const message: WebSocketMessage = JSON.parse(data.toString());
         console.log("WebSocket message received:", message);
 
@@ -91,8 +100,8 @@ export function setupWebSocket(server: Server) {
 
             // Check if room exists and is not ended
             const [room] = await db.select()
-              .from(rooms)
-              .where(eq(rooms.id, message.roomId));
+              .from(dbRooms)
+              .where(eq(dbRooms.id, message.roomId));
 
             if (!room || room.endedAt) {
               ws.send(JSON.stringify({
@@ -104,25 +113,32 @@ export function setupWebSocket(server: Server) {
 
             ws.roomId = message.roomId;
 
-            if (!rooms.has(message.roomId)) {
-              rooms.set(message.roomId, new Set());
+            // Add client to room
+            if (!connectedRooms.has(message.roomId)) {
+              connectedRooms.set(message.roomId, new Set());
             }
-            rooms.get(message.roomId)!.add(ws);
+            connectedRooms.get(message.roomId)!.add(ws);
 
-            // Create thread for the room if it doesn't exist
-            try {
-              const thread = await createThread();
-              // Store threadId with room ID prefix
-              ws.threadId = thread.id;
-            } catch (error) {
-              console.error("Failed to create thread:", error);
+            // Store thread ID if provided
+            if (message.threadId) {
+              ws.threadId = message.threadId;
             }
+
+            // Send join message
+            await db.insert(roomMessages)
+              .values({
+                roomId: message.roomId,
+                userId: 0, // System message
+                content: `${ws.username} joined the room`,
+                createdAt: new Date(),
+                isAssistant: true,
+              });
 
             broadcastToRoom(message.roomId, {
               type: "chat",
               content: `${ws.username} joined the room`,
-              userId: ws.userId,
-              username: "Medical Assistant",
+              userId: 0,
+              username: "System",
               isAssistant: true
             });
             break;
@@ -134,8 +150,8 @@ export function setupWebSocket(server: Server) {
 
             // Check if room still exists and is not ended
             const [activeRoom] = await db.select()
-              .from(rooms)
-              .where(eq(rooms.id, ws.roomId));
+              .from(dbRooms)
+              .where(eq(dbRooms.id, ws.roomId));
 
             if (!activeRoom || activeRoom.endedAt) {
               ws.send(JSON.stringify({
@@ -145,27 +161,27 @@ export function setupWebSocket(server: Server) {
               return;
             }
 
-            const newMessage = await db.insert(roomMessages)
+            // Send user message
+            await db.insert(roomMessages)
               .values({
                 roomId: ws.roomId,
                 userId: ws.userId,
                 content: message.content,
                 createdAt: new Date(),
                 isAssistant: false,
-              })
-              .returning();
+              });
 
             broadcastToRoom(ws.roomId, {
               type: "chat",
               content: message.content,
               userId: ws.userId,
               username: ws.username,
-              isAssistant: false,
+              isAssistant: false
             });
 
-            // Only attempt AI response if we have a valid thread
-            try {
-              if (ws.threadId) {
+            // Process AI response if thread exists
+            if (ws.threadId) {
+              try {
                 const assistantResponse = await sendMessage(
                   message.content, 
                   ws.threadId,
@@ -186,12 +202,12 @@ export function setupWebSocket(server: Server) {
                   content: assistantResponse.content,
                   userId: 0,
                   username: "Medical Assistant",
-                  isAssistant: true,
+                  isAssistant: true
                 });
+              } catch (error) {
+                console.error("Failed to get AI response:", error);
+                handleMessageError(error, ws);
               }
-            } catch (error) {
-              console.error("Failed to get AI response:", error);
-              handleMessageError(error, ws);
             }
             break;
 
@@ -209,8 +225,8 @@ export function setupWebSocket(server: Server) {
     });
   });
 
-  function broadcastToRoom(roomId: number, message: WebSocketMessage & { isAssistant?: boolean }) {
-    const roomClients = rooms.get(roomId);
+  function broadcastToRoom(roomId: number, message: WebSocketMessage) {
+    const roomClients = connectedRooms.get(roomId);
     if (!roomClients) return;
 
     const messageStr = JSON.stringify(message);
@@ -227,19 +243,37 @@ export function setupWebSocket(server: Server) {
     try {
       // Check if room has ended
       const [room] = await db.select()
-        .from(rooms)
-        .where(eq(rooms.id, ws.roomId));
+        .from(dbRooms)
+        .where(eq(dbRooms.id, ws.roomId));
 
-      const roomClients = rooms.get(ws.roomId);
+      const roomClients = connectedRooms.get(ws.roomId);
       if (roomClients) {
         roomClients.delete(ws);
         if (roomClients.size === 0) {
-          rooms.delete(ws.roomId);
+          connectedRooms.delete(ws.roomId);
         }
       }
 
-      // Only update participant status if room hasn't ended
+      // Only send leave message if room hasn't ended
       if (!room?.endedAt) {
+        await db.insert(roomMessages)
+          .values({
+            roomId: ws.roomId,
+            userId: 0,
+            content: `${ws.username} left the room`,
+            createdAt: new Date(),
+            isAssistant: true,
+          });
+
+        broadcastToRoom(ws.roomId, {
+          type: "chat",
+          content: `${ws.username} left the room`,
+          userId: 0,
+          username: "System",
+          isAssistant: true
+        });
+
+        // Update participant status
         await db.update(roomParticipants)
           .set({ leftAt: new Date() })
           .where(
@@ -248,16 +282,6 @@ export function setupWebSocket(server: Server) {
               eq(roomParticipants.userId, ws.userId)
             )
           );
-
-        if (ws.username) {
-          broadcastToRoom(ws.roomId, {
-            type: "chat",
-            content: `${ws.username} left the room`,
-            userId: 0,
-            username: "Medical Assistant",
-            isAssistant: true
-          });
-        }
       }
     } catch (error) {
       console.error("Error handling client leave:", error);

@@ -18,17 +18,16 @@ export function useRoom() {
 
   // Create a new room
   const createRoom = useMutation({
-    mutationFn: async ({ scenarioId, maxParticipants }: { scenarioId: number, maxParticipants?: number }) => {
+    mutationFn: async ({ scenarioId }: { scenarioId: number }) => {
       const res = await fetch("/api/rooms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenarioId, maxParticipants }),
+        body: JSON.stringify({ scenarioId }),
         credentials: "include",
       });
 
       if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error);
+        throw new Error(await res.text());
       }
 
       return res.json() as Promise<Room>;
@@ -46,8 +45,7 @@ export function useRoom() {
       });
 
       if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error);
+        throw new Error(await res.text());
       }
 
       return res.json() as Promise<Room>;
@@ -68,7 +66,7 @@ export function useRoom() {
   }, []);
 
   // Connect to room WebSocket
-  const connectToRoom = useCallback((roomId: number, userId: number, username: string) => {
+  const connectToRoom = useCallback((roomId: number, userId: number, username: string, threadId?: string) => {
     if (socket) {
       socket.close();
     }
@@ -78,15 +76,20 @@ export function useRoom() {
     try {
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
+
+      console.log("Connecting to WebSocket:", wsUrl);
       const ws = new WebSocket(wsUrl);
 
+      // Connection event handlers
       ws.onopen = () => {
         console.log("WebSocket connection established");
+        // Send join message with all necessary data
         ws.send(JSON.stringify({
           type: "join",
           roomId,
           userId,
           username,
+          threadId,
         }));
         setIsConnecting(false);
       };
@@ -113,14 +116,23 @@ export function useRoom() {
         setIsConnecting(false);
       };
 
-      ws.onclose = () => {
-        console.log("WebSocket connection closed");
+      ws.onclose = (event) => {
+        console.log("WebSocket connection closed:", event.code, event.reason);
         setIsConnecting(false);
         setSocket(null);
+
+        // Attempt to reconnect if the connection was closed unexpectedly
+        if (event.code === 1006 || event.code === 1001) {
+          setTimeout(() => {
+            console.log("Attempting to reconnect...");
+            connectToRoom(roomId, userId, username, threadId);
+          }, 5000);
+        }
       };
 
       setSocket(ws);
 
+      // Cleanup function
       return () => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "leave" }));

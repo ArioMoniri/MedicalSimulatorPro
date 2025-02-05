@@ -335,38 +335,43 @@ export function setupAuth(app: Express) {
   });
 }
 
-// Adding WebSocket-specific authentication handling
-export function authenticateWebSocket(cookieString: string): Promise<Express.User | null> {
-  return new Promise(async (resolve) => {
-    try {
-      // Parse session ID from cookies
-      const sessionMatch = cookieString.match(/connect\.sid=([^;]+)/);
-      if (!sessionMatch) {
-        resolve(null);
-        return;
-      }
-
-      const sessionId = decodeURIComponent(sessionMatch[1]);
-      if (!sessionId) {
-        resolve(null);
-        return;
-      }
-
-      // Query the user directly from database since we can't access session store
-      const [user] = await db
-        .select({
-          id: users.id,
-          username: users.username,
-          email: users.email,
-          createdAt: users.createdAt,
-        })
-        .from(users)
-        .limit(1);
-
-      resolve(user || null);
-    } catch (err) {
-      console.error("WebSocket auth error:", err);
-      resolve(null);
+// Add WebSocket-specific authentication handling
+export async function authenticateWebSocket(cookieString: string): Promise<Express.User | null> {
+  try {
+    // Parse session ID from cookies
+    const sessionMatch = cookieString.match(/connect\.sid=s%3A([^.]+)\./);
+    if (!sessionMatch) {
+      console.error("No session ID found in cookies");
+      return null;
     }
-  });
+
+    const sessionId = sessionMatch[1];
+    if (!sessionId) {
+      console.error("Invalid session ID format");
+      return null;
+    }
+
+    // Query the user directly from database using session ID
+    const [user] = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .where(eq(users.id, parseInt(sessionId, 10)))
+      .limit(1);
+
+    if (!user) {
+      console.error("No user found for session ID:", sessionId);
+      return null;
+    }
+
+    console.log("WebSocket authenticated for user:", user.username);
+    return user;
+  } catch (err) {
+    console.error("WebSocket auth error:", err);
+    return null;
+  }
 }
