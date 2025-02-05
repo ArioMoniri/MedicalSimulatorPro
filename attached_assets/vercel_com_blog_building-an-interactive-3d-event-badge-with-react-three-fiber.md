@@ -184,6 +184,8 @@ vec.add(dir.multiplyScalar(state.camera.position.length()))
 
 Refresh previewOpen on CodeSandbox
 
+Open on CodeSandbox
+
 ## [Building a rough draft](https://vercel.com/blog/building-an-interactive-3d-event-badge-with-react-three-fiber\#building-a-rough-draft)
 
 The basic imports we need revolve around our canvas, physics, and the thick line for the lanyard:

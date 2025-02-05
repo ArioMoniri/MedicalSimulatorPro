@@ -1,6 +1,6 @@
-import * as THREE from 'three';
-import { useRef, useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Canvas, extend, useThree, useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
 import { 
   BallCollider, 
   CuboidCollider, 
