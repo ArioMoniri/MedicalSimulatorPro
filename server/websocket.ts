@@ -39,21 +39,45 @@ export function setupWebSocket(server: Server) {
 
         const cookies = info.req.headers.cookie;
         if (!cookies) {
-          console.error("WebSocket auth failed: No cookies");
+          console.error("WebSocket auth failed: No cookies", {
+            headers: info.req.headers
+          });
           return cb(false, 401, 'Unauthorized');
         }
 
-        const user = await authenticateWebSocket(cookies);
-        if (!user) {
-          console.error("WebSocket auth failed: Invalid session");
+        try {
+          const user = await authenticateWebSocket(cookies);
+          if (!user) {
+            console.error("WebSocket auth failed: Invalid session", {
+              cookieLength: cookies.length
+            });
+            return cb(false, 401, 'Unauthorized');
+          }
+
+          // Add debug logging
+          console.log("WebSocket authentication successful:", {
+            userId: user.id,
+            username: user.username,
+            cookiePresent: true
+          });
+
+          // Attach user to the request object
+          (info.req as any).user = user;
+          return cb(true);
+        } catch (error) {
+          console.error("WebSocket authentication error details:", {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            cookies: cookies.substring(0, 100) + '...',
+            stack: error instanceof Error ? error.stack : undefined
+          });
           return cb(false, 401, 'Unauthorized');
         }
-
-        (info.req as any).user = user;
-        return cb(true);
-      } catch (error) {
-        console.error("WebSocket authentication error:", error);
-        return cb(false, 401, 'Unauthorized');
+      } catch (outer_error) {
+        console.error("Outer WebSocket verification error:", {
+          error: outer_error instanceof Error ? outer_error.message : 'Unknown error',
+          stack: outer_error instanceof Error ? outer_error.stack : undefined
+        });
+        return cb(false, 500, 'Internal Server Error');
       }
     }
   });

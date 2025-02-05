@@ -387,6 +387,16 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         return dateA - dateB;
       });
 
+      // Process all messages for vital signs
+      sortedMessages.forEach(msg => {
+        if (msg.isAssistant) {
+          const vitals = parseVitalSigns(msg.content);
+          if (vitals) {
+            setLatestVitals(vitals);
+          }
+        }
+      });
+
       const newMessages: Message[] = sortedMessages.map((msg) => {
         // For system messages (join/leave/typing)
         if (msg.content.includes("joined the room") ||
@@ -397,7 +407,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
             role: "assistant",
             content: msg.content,
             createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-            username: msg.username || "System",
+            username: "System",
             isTyping: msg.content.includes("is typing"),
             isAssistant: true
           };
@@ -416,7 +426,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
             role: "assistant",
             content: msg.content,
             createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-            username: msg.username || "Medical Assistant",
+            username: "Medical Assistant",
             isTyping: false,
             isAssistant: true
           };
@@ -428,7 +438,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           role: "user",
           content: msg.content,
           createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-          username: msg.username,
+          username: msg.username || user?.username,
           isTyping: false,
           isAssistant: false
         };
@@ -543,13 +553,31 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
 
   const handleEndRoom = async () => {
     try {
-      const response = await fetch(`/api/rooms/${currentRoom?.id}/end`, {
+      if (!currentRoom || !user) {
+        throw new Error("Room or user information is missing");
+      }
+
+      const response = await fetch(`/api/rooms/${currentRoom.id}/end`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
         credentials: 'include',
+        body: JSON.stringify({
+          userId: user.id,
+          creatorId: currentRoom.creatorId
+        })
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        const errorText = await response.text();
+        console.error('Room end error:', {
+          status: response.status,
+          error: errorText,
+          userId: user.id,
+          creatorId: currentRoom.creatorId
+        });
+        throw new Error(errorText);
       }
 
       handleLeaveRoom();
@@ -689,99 +717,92 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const parseVitalSigns = (content: string): VitalSigns | null => {
     console.log("Attempting to parse vital signs from:", content);
 
-    // Try to find vital signs in different formats throughout the text
-    const findValue = (text: string, patterns: string[]): string | null => {
-      for (const pattern of patterns) {
-        const regex = new RegExp(pattern, 'i');
-        const match = text.match(regex);
-        if (match && match[1]) {
-          return match[1];
-        }
-      }
-      return null;
-    };
-
-    // Split content into lines and clean them
-    const lines = content.split(/[\n,]/)
-      .map(line => line.trim())
-      .filter(Boolean);
+    // Clean up markdown bullet points and other special characters
+    const cleanContent = content
+      .replace(/[•*-]\s+/g, '')  // Remove bullet points and their spaces
+      .replace(/\([^)]*\)/g, '') // Remove parenthetical statements
+      .replace(/\s+/g, ' ')      // Normalize whitespace
+      .trim();
 
     const vitals: VitalSigns = {};
 
-    // Process each line for vital signs
-    lines.forEach(line => {
-      // Heart Rate patterns
-      const hrPatterns = [
-        'HR:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?',
-        'Heart Rate:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?',
-        'Pulse:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?'
-      ];
-      const hrValue = findValue(line, hrPatterns);
-      if (hrValue) {
-        vitals.hr = parseInt(hrValue);
-        console.log("Found HR:", vitals.hr);
-      }
+    // Define regex patterns with more flexible matching
+    const patterns = {
+      // Matches e.g. "HR: 140 bpm" or "(hr): 140"
+      hr: /\(?\s*(?:hr|heart rate)\s*\)?\s*:?\s*(\d+)(?:\s*bpm)?/i,
 
-      // Blood Pressure patterns
-      const bpPatterns = [
-        'BP:?\\s*(\\d+)\\s*/\\s*(\\d+)(?:\\s*(?:mmHg|mm Hg))?',
-        'Blood Pressure:?\\s*(\\d+)\\s*/\\s*(\\d+)(?:\\s*(?:mmHg|mm Hg))?'
-      ];
-      for (const pattern of bpPatterns) {
-        const match = line.match(new RegExp(pattern, 'i'));
-        if (match && match[1] && match[2]) {
-          vitals.bp = {
-            systolic: parseInt(match[1]),
-            diastolic: parseInt(match[2])
-          };
-          console.log("Found BP:", vitals.bp);
-          break;
-        }
-      }
+      // Matches e.g. "BP: 90/60 mmHg" or "(Blood Pressure): 90/60"
+      BP: /\(?\s*(?:bp|blood pressure)\s*\)?\s*:?\s*(\d+)\s*\/\s*(\d+)(?:\s*(?:mmhg|mm hg))?/i,
 
-      // Respiratory Rate patterns
-      const rrPatterns = [
-        'RR:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?',
-        'Respiratory Rate:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?',
-        'Resp:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?'
-      ];
-      const rrValue = findValue(line, rrPatterns);
-      if (rrValue) {
-        vitals.rr = parseInt(rrValue);
-        console.log("Found RR:", vitals.rr);
-      }
+      // Matches e.g. "RR: 28" or "(Respiratory Rate): 28"
+      rr: /\(?\s*(?:rr|respiratory rate|resp)\s*\)?\s*:?\s*(\d+)(?:\s*(?:breaths\/min|\/min|bpm))?/i,
 
-      // SpO2 patterns
-      const spo2Patterns = [
-        'SpO2:?\\s*(\\d+)\\s*%?',
-        'O2 Sat:?\\s*(\\d+)\\s*%?',
-        'Oxygen Saturation:?\\s*(\\d+)\\s*%?',
-        'SaO2:?\\s*(\\d+)\\s*%?'
-      ];
-      const spo2Value = findValue(line, spo2Patterns);
-      if (spo2Value) {
-        vitals.spo2 = parseInt(spo2Value);
-        console.log("Found SpO2:", vitals.spo2);
-      }
+      // Matches e.g. "SpO2: 91%" or "(oxygen saturation): 91"
+      spo2: /\(?\s*(?:spo2|o2 sat|oxygen saturation|sao2)\s*\)?\s*:?\s*(\d+)\s*%?/i,
 
-      // Temperature patterns
-      const tempPatterns = [
-        'Temp:?\\s*(\\d+\\.?\\d*)\\s*[°]?C',
-        'Temperature:?\\s*(\\d+\\.?\\d*)\\s*[°]?C',
-        'Temp:?\\s*(\\d+\\.?\\d*)\\s*[°]?F',
-        'Temperature:?\\s*(\\d+\\.?\\d*)\\s*[°]?F'
-      ];
-      const tempValue = findValue(line, tempPatterns);
-      if (tempValue) {
-        vitals.temp = parseFloat(tempValue);
-        console.log("Found Temp:", vitals.temp);
-      }
-    });
+      // Matches e.g. "Temp: 36.5°C" or "(temperature): 36.5"
+      temp: /\(?\s*(?:temp|temperature)\s*\)?\s*:?\s*([\d.]+)(?:\s*[°]?\s*[CF])?/i
+    };
 
-    // Look for vital signs in the entire text if not found line by line
+    // Extract vital signs
+    const hrMatch = cleanContent.match(patterns.hr);
+    if (hrMatch) {
+      vitals.hr = parseInt(hrMatch[1]);
+      console.log("Found HR:", vitals.hr);
+    }
+
+    const bpMatch = cleanContent.match(patterns.bp);
+    if (bpMatch) {
+      vitals.bp = {
+        systolic: parseInt(bpMatch[1]),
+        diastolic: parseInt(bpMatch[2])
+      };
+      console.log("Found BP:", vitals.bp);
+    }
+
+    const rrMatch = cleanContent.match(patterns.rr);
+    if (rrMatch) {
+      vitals.rr = parseInt(rrMatch[1]);
+      console.log("Found RR:", vitals.rr);
+    }
+
+    const spo2Match = cleanContent.match(patterns.spo2);
+    if (spo2Match) {
+      vitals.spo2 = parseInt(spo2Match[1]);
+      console.log("Found SpO2:", vitals.spo2);
+    }
+
+    const tempMatch = cleanContent.match(patterns.temp);
+    if (tempMatch) {
+      vitals.temp = parseFloat(tempMatch[1]);
+      console.log("Found Temp:", vitals.temp);
+    }
+
+    // If no vitals found, try splitting by common delimiters and process each part
     if (Object.keys(vitals).length === 0) {
-      const fullText = content.replace(/\s+/g, ' ');
-      lines.push(fullText);
+      const parts = cleanContent.split(/[,•]/).map(part => part.trim());
+      parts.forEach(part => {
+        if (!vitals.hr) {
+          const hrMatch = part.match(patterns.hr);
+          if (hrMatch) vitals.hr = parseInt(hrMatch[1]);
+        }
+        if (!vitals.bp) {
+          const bpMatch = part.match(patterns.bp);
+          if (bpMatch) vitals.bp = { systolic: parseInt(bpMatch[1]), diastolic: parseInt(bpMatch[2]) };
+        }
+        if (!vitals.rr) {
+          const rrMatch = part.match(patterns.rr);
+          if (rrMatch) vitals.rr = parseInt(rrMatch[1]);
+        }
+        if (!vitals.spo2) {
+          const spo2Match = part.match(patterns.spo2);
+          if (spo2Match) vitals.spo2 = parseInt(spo2Match[1]);
+        }
+        if (!vitals.temp) {
+          const tempMatch = part.match(patterns.temp);
+          if (tempMatch) vitals.temp = parseFloat(tempMatch[1]);
+        }
+      });
     }
 
     console.log("Final parsed vitals:", vitals);
