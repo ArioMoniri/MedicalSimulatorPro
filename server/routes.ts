@@ -210,7 +210,21 @@ export function registerRoutes(app: Express): Server {
           )
         );
 
-      res.json({ message: "Room ended successfully" });
+      // Add system message about room ending
+      await db.insert(roomMessages)
+        .values({
+          roomId: parsedRoomId,
+          userId: 0,
+          content: "Room has been ended by the creator.",
+          createdAt: new Date(),
+          isAssistant: true
+        });
+
+      // Send a response to trigger WebSocket close
+      res.json({ 
+        message: "Room ended successfully",
+        action: "ROOM_ENDED" 
+      });
     } catch (error) {
       console.error("End room error:", error);
       res.status(500).json({ message: "Failed to end room" });

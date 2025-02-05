@@ -4,7 +4,7 @@ import { db } from "@db";
 import { rooms, roomMessages, roomParticipants } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import { authenticateWebSocket } from "./auth";
-import { sendMessage } from "./services/assistant-service";
+import { sendMessage, createThread } from "./services/assistant-service"; // Added createThread import
 
 interface WebSocketMessage {
   type: "join" | "chat" | "leave";
@@ -20,6 +20,7 @@ interface ConnectedClient extends WebSocket {
   userId?: number;
   username?: string;
   isAuthenticated?: boolean;
+  threadId?: string; // Added threadId property
 }
 
 export function setupWebSocket(server: Server) {
@@ -61,6 +62,14 @@ export function setupWebSocket(server: Server) {
       ws.username = user.username;
     }
 
+    const handleMessageError = (error: any, ws: ConnectedClient) => {
+      console.error("WebSocket error:", error);
+      ws.send(JSON.stringify({ 
+        type: "error", 
+        message: error instanceof Error ? error.message : "Failed to process message"
+      }));
+    };
+
     ws.on("message", async (data) => {
       try {
         if (!ws.isAuthenticated) {
@@ -80,6 +89,19 @@ export function setupWebSocket(server: Server) {
               throw new Error("Missing required fields for join");
             }
 
+            // Check if room exists and is not ended
+            const [room] = await db.select()
+              .from(rooms)
+              .where(eq(rooms.id, message.roomId));
+
+            if (!room || room.endedAt) {
+              ws.send(JSON.stringify({
+                type: "error",
+                message: room?.endedAt ? "Room has ended" : "Room not found"
+              }));
+              return;
+            }
+
             ws.roomId = message.roomId;
 
             if (!rooms.has(message.roomId)) {
@@ -87,17 +109,21 @@ export function setupWebSocket(server: Server) {
             }
             rooms.get(message.roomId)!.add(ws);
 
-            await db.insert(roomParticipants).values({
-              roomId: message.roomId,
-              userId: ws.userId,
-              joinedAt: new Date(),
-            });
+            // Create thread for the room if it doesn't exist
+            try {
+              const thread = await createThread();
+              // Store threadId with room ID prefix
+              ws.threadId = thread.id;
+            } catch (error) {
+              console.error("Failed to create thread:", error);
+            }
 
             broadcastToRoom(message.roomId, {
               type: "chat",
               content: `${ws.username} joined the room`,
               userId: ws.userId,
-              username: ws.username,
+              username: "Medical Assistant",
+              isAssistant: true
             });
             break;
 
@@ -106,12 +132,28 @@ export function setupWebSocket(server: Server) {
               throw new Error("Missing required fields for chat");
             }
 
-            await db.insert(roomMessages).values({
-              roomId: ws.roomId,
-              userId: ws.userId,
-              content: message.content,
-              isAssistant: false,
-            });
+            // Check if room still exists and is not ended
+            const [activeRoom] = await db.select()
+              .from(rooms)
+              .where(eq(rooms.id, ws.roomId));
+
+            if (!activeRoom || activeRoom.endedAt) {
+              ws.send(JSON.stringify({
+                type: "error",
+                message: "Room has ended or does not exist"
+              }));
+              return;
+            }
+
+            const newMessage = await db.insert(roomMessages)
+              .values({
+                roomId: ws.roomId,
+                userId: ws.userId,
+                content: message.content,
+                createdAt: new Date(),
+                isAssistant: false,
+              })
+              .returning();
 
             broadcastToRoom(ws.roomId, {
               type: "chat",
@@ -121,33 +163,35 @@ export function setupWebSocket(server: Server) {
               isAssistant: false,
             });
 
+            // Only attempt AI response if we have a valid thread
             try {
-              const assistantResponse = await sendMessage(
-                message.content, 
-                `thread_${ws.roomId}`,
-                "emergency" 
-              );
+              if (ws.threadId) {
+                const assistantResponse = await sendMessage(
+                  message.content, 
+                  ws.threadId,
+                  "emergency"
+                );
 
-              await db.insert(roomMessages).values({
-                roomId: ws.roomId,
-                userId: 0,
-                content: assistantResponse.content,
-                isAssistant: true,
-              });
+                await db.insert(roomMessages)
+                  .values({
+                    roomId: ws.roomId,
+                    userId: 0,
+                    content: assistantResponse.content,
+                    createdAt: new Date(),
+                    isAssistant: true,
+                  });
 
-              broadcastToRoom(ws.roomId, {
-                type: "chat",
-                content: assistantResponse.content,
-                userId: 0,
-                username: "Medical Assistant",
-                isAssistant: true,
-              });
+                broadcastToRoom(ws.roomId, {
+                  type: "chat",
+                  content: assistantResponse.content,
+                  userId: 0,
+                  username: "Medical Assistant",
+                  isAssistant: true,
+                });
+              }
             } catch (error) {
               console.error("Failed to get AI response:", error);
-              ws.send(JSON.stringify({
-                type: "error",
-                message: "Failed to get AI response"
-              }));
+              handleMessageError(error, ws);
             }
             break;
 
@@ -156,11 +200,7 @@ export function setupWebSocket(server: Server) {
             break;
         }
       } catch (error) {
-        console.error("WebSocket error:", error);
-        ws.send(JSON.stringify({ 
-          type: "error", 
-          message: error instanceof Error ? error.message : "Failed to process message"
-        }));
+        handleMessageError(error, ws);
       }
     });
 
@@ -184,34 +224,43 @@ export function setupWebSocket(server: Server) {
   async function handleClientLeave(ws: ConnectedClient) {
     if (!ws.roomId || !ws.userId) return;
 
-    const roomClients = rooms.get(ws.roomId);
-    if (roomClients) {
-      roomClients.delete(ws);
-      if (roomClients.size === 0) {
-        rooms.delete(ws.roomId);
-      }
-    }
-
     try {
-      await db.update(roomParticipants)
-        .set({ leftAt: new Date() })
-        .where(
-          and(
-            eq(roomParticipants.roomId, ws.roomId),
-            eq(roomParticipants.userId, ws.userId)
-          )
-        );
+      // Check if room has ended
+      const [room] = await db.select()
+        .from(rooms)
+        .where(eq(rooms.id, ws.roomId));
 
-      if (ws.username) {
-        broadcastToRoom(ws.roomId, {
-          type: "chat",
-          content: `${ws.username} left the room`,
-          userId: ws.userId,
-          username: ws.username,
-        });
+      const roomClients = rooms.get(ws.roomId);
+      if (roomClients) {
+        roomClients.delete(ws);
+        if (roomClients.size === 0) {
+          rooms.delete(ws.roomId);
+        }
+      }
+
+      // Only update participant status if room hasn't ended
+      if (!room?.endedAt) {
+        await db.update(roomParticipants)
+          .set({ leftAt: new Date() })
+          .where(
+            and(
+              eq(roomParticipants.roomId, ws.roomId),
+              eq(roomParticipants.userId, ws.userId)
+            )
+          );
+
+        if (ws.username) {
+          broadcastToRoom(ws.roomId, {
+            type: "chat",
+            content: `${ws.username} left the room`,
+            userId: 0,
+            username: "Medical Assistant",
+            isAssistant: true
+          });
+        }
       }
     } catch (error) {
-      console.error("Error updating participant record:", error);
+      console.error("Error handling client leave:", error);
     }
   }
 }

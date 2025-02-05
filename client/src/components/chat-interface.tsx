@@ -369,9 +369,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     if (roomMessagesData) {
       // Sort messages by createdAt in ascending order (oldest first)
       const sortedMessages = [...roomMessagesData].sort((a, b) => {
-        const dateA = new Date(a.createdAt).getTime();
-        const dateB = new Date(b.createdAt).getTime();
-        return dateA - dateB;
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       });
 
       setMessages(
@@ -379,8 +377,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           id: msg.id,
           role: msg.isAssistant ? "assistant" : "user",
           content: msg.content,
-          createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-          username: msg.isAssistant ? "Medical Assistant" : msg.username
+          createdAt: msg.createdAt,
+          username: msg.isAssistant ? "Medical Assistant" : msg.username || "Unknown User"
         }))
       );
     }
@@ -797,19 +795,20 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
               <div
                 key={i}
                 className={`flex ${
-                  message.role === "user" ? "justify-end" : "justify-start"
+                  message.role === "user" && message.username === user?.username 
+                    ? "justify-end" 
+                    : "justify-start"
                 }`}
               >
                 {message.role === "assistant" && (
                   <Avatar className="h-8 w-8 mr-2">
-
                     <AvatarImage src="/assistant-profile.jpeg" alt="Assistant" />
                     <AvatarFallback>AI</AvatarFallback>
                   </Avatar>
                 )}
                 <div
                   className={`rounded-lg px-4 py-2 max-w-[80%] ${
-                    message.role === "user"
+                    message.role === "user" && message.username === user?.username
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted"
                   }`}
