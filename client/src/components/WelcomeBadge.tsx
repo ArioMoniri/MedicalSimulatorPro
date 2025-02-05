@@ -43,7 +43,7 @@ export default function WelcomeBadge({ username, onClose }: WelcomeBadgeProps) {
     const timer = setTimeout(() => {
       setShow(false);
       onClose();
-    }, 3000);
+    }, 10000); // Increased time to 10 seconds for better interaction
 
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -71,9 +71,9 @@ export default function WelcomeBadge({ username, onClose }: WelcomeBadgeProps) {
         left: 0,
         width: '100%',
         height: '100%',
-        zIndex: 9999, // Increased z-index
-        pointerEvents: 'all', 
-        backgroundColor: 'rgba(0,0,0,0.5)' 
+        zIndex: 9999,
+        pointerEvents: 'all',
+        backgroundColor: 'rgba(0,0,0,0.5)'
       }}
     >
       <Canvas 
@@ -88,7 +88,11 @@ export default function WelcomeBadge({ username, onClose }: WelcomeBadgeProps) {
       >
         <color attach="background" args={['transparent']} />
         <ambientLight intensity={Math.PI} />
-        <Physics interpolate gravity={[0, -40, 0]} timeStep={1 / 60}>
+        <Physics 
+          interpolate 
+          gravity={[0, -40, 0]} 
+          timeStep={1 / 60}
+        >
           <Badge username={username} />
         </Physics>
         <Environment preset="city" />
@@ -111,12 +115,16 @@ function Badge({ username }: { username: string }) {
   const dir = new THREE.Vector3();
 
   const { width, height } = useThree((state) => state.size);
-  const [curve] = useState(() => new THREE.CatmullRomCurve3([
-    new THREE.Vector3(),
-    new THREE.Vector3(),
-    new THREE.Vector3(),
-    new THREE.Vector3()
-  ]));
+  const [curve] = useState(() => {
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(),
+      new THREE.Vector3(),
+      new THREE.Vector3(),
+      new THREE.Vector3()
+    ]);
+    curve.curveType = 'centripetal'; // Better curve interpolation
+    return curve;
+  });
 
   const [dragged, drag] = useState<DragState | false>(false);
   const [hovered, hover] = useState(false);
@@ -141,7 +149,7 @@ function Badge({ username }: { username: string }) {
   useRopeJoint(j2, j3, [[0, 0, 0], [0, 0, 0], 1]);
   useSphericalJoint(j3, card, [[0, 0, 0], [0, 1.45, 0]]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (dragged && card.current) {
       vec.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
       dir.copy(vec).sub(state.camera.position).normalize();
@@ -159,7 +167,7 @@ function Badge({ username }: { username: string }) {
       [j1, j2].forEach((ref) => {
         if (!ref.current.lerped) ref.current.lerped = new THREE.Vector3().copy(ref.current.translation());
         const clampedDistance = Math.max(0.1, Math.min(1, ref.current.lerped.distanceTo(ref.current.translation())));
-        ref.current.lerped.lerp(ref.current.translation(), 0.016 * (10 + clampedDistance * 40));
+        ref.current.lerped.lerp(ref.current.translation(), delta * (10 + clampedDistance * 40));
       });
 
       // Update curve points for the band
@@ -177,7 +185,12 @@ function Badge({ username }: { username: string }) {
     if (card.current) {
       ang.copy(card.current.angvel());
       rot.copy(card.current.rotation());
-      card.current.setAngvel({ x: ang.x, y: ang.y - rot.y * 0.25, z: ang.z });
+      // Smoother rotation damping
+      card.current.setAngvel({ 
+        x: ang.x * 0.95, 
+        y: ang.y - rot.y * 0.25, 
+        z: ang.z * 0.95 
+      });
     }
   });
 
