@@ -23,56 +23,6 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/scenarios", async (_req: Request, res: Response) => {
     try {
       const allScenarios = await db.select().from(scenarios);
-
-      if (!allScenarios.length) {
-        // Add initial scenarios if none exist
-        const initialScenarios = [
-          {
-            title: "Cardiac Arrest Management",
-            description: "Handle a case of sudden cardiac arrest in the emergency department",
-            type: "emergency",
-            content: {
-              initialState: "Patient presents with sudden collapse",
-              objectives: ["Assess vital signs", "Initiate CPR protocol", "Manage cardiac rhythm"],
-              vitalSigns: { bp: "0/0", pulse: "0", resp: "0", o2sat: "85%" }
-            }
-          },
-          {
-            title: "Respiratory Distress",
-            description: "Manage acute respiratory distress in an adult patient",
-            type: "emergency",
-            content: {
-              initialState: "Patient presents with severe shortness of breath",
-              objectives: ["Assess airway", "Check oxygen saturation", "Initiate appropriate oxygen therapy"],
-              vitalSigns: { bp: "140/90", pulse: "120", resp: "28", o2sat: "88%" }
-            }
-          },
-          {
-            title: "Diabetes Initial Consultation",
-            description: "Conduct initial consultation",
-            type: "clinical",
-            content: {
-              initialState: "Patient referred for diabetes management",
-              objectives: ["Review medical history", "Assess current symptoms", "Develop management plan"],
-              labResults: { hba1c: "8.2%", fastingGlucose: "180" }
-            }
-          },
-          {
-            title: "Hypertension Follow-up",
-            description: "Conduct follow-up consultation for hypertension management",
-            type: "clinical",
-            content: {
-              initialState: "Regular follow-up for hypertension",
-              objectives: ["Review blood pressure logs", "Assess medication compliance", "Adjust treatment if needed"],
-              vitalSigns: { bp: "150/95", pulse: "76" }
-            }
-          }
-        ];
-
-        await db.insert(scenarios).values(initialScenarios);
-        return res.json(initialScenarios);
-      }
-
       res.json(allScenarios);
     } catch (error) {
       console.error("Get scenarios error:", error);
@@ -123,6 +73,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Join room endpoint
   app.post("/api/rooms/join", async (req: Request, res: Response) => {
     try {
       if (!req.user?.id) {
@@ -137,8 +88,7 @@ export function registerRoutes(app: Express): Server {
 
       const [room] = await db.select()
         .from(rooms)
-        .where(eq(rooms.code, code.toUpperCase()))
-        .limit(1);
+        .where(eq(rooms.code, code.toUpperCase()));
 
       if (!room) {
         return res.status(404).json({ message: "Room not found" });
@@ -190,6 +140,31 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Get room messages endpoint
+  app.get("/api/rooms/:roomId/messages", async (req: Request, res: Response) => {
+    try {
+      const { roomId } = req.params;
+
+      const messages = await db.select({
+        id: roomMessages.id,
+        content: roomMessages.content,
+        createdAt: roomMessages.createdAt,
+        userId: roomMessages.userId,
+        isAssistant: roomMessages.isAssistant,
+        username: sql<string>`CASE WHEN ${roomMessages.userId} = 0 THEN 'Medical Assistant' ELSE (SELECT username FROM users WHERE id = ${roomMessages.userId}) END`
+      })
+      .from(roomMessages)
+      .where(eq(roomMessages.roomId, parseInt(roomId)))
+      .orderBy(desc(roomMessages.createdAt));
+
+      res.json(messages);
+    } catch (error) {
+      console.error("Get room messages error:", error);
+      res.status(500).json({ message: "Failed to get room messages" });
+    }
+  });
+
+  // End room endpoint
   app.post("/api/rooms/:roomId/end", async (req: Request, res: Response) => {
     try {
       if (!req.user?.id) {
@@ -201,8 +176,7 @@ export function registerRoutes(app: Express): Server {
       // Get room and verify creator
       const [room] = await db.select()
         .from(rooms)
-        .where(eq(rooms.id, parseInt(roomId)))
-        .limit(1);
+        .where(eq(rooms.id, parseInt(roomId)));
 
       if (!room) {
         return res.status(404).json({ message: "Room not found" });
@@ -223,7 +197,7 @@ export function registerRoutes(app: Express): Server {
         .where(
           and(
             eq(roomParticipants.roomId, parseInt(roomId)),
-            eq(roomParticipants.leftAt, null)
+            sql`${roomParticipants.leftAt} IS NULL`
           )
         );
 
@@ -231,23 +205,6 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("End room error:", error);
       res.status(500).json({ message: "Failed to end room" });
-    }
-  });
-
-  app.get("/api/rooms/:roomId/messages", async (req: Request, res: Response) => {
-    try {
-      const { roomId } = req.params;
-
-      const messages = await db.select()
-        .from(roomMessages)
-        .where(eq(roomMessages.roomId, parseInt(roomId)))
-        .orderBy(desc(roomMessages.createdAt))
-        .limit(100);
-
-      res.json(messages);
-    } catch (error) {
-      console.error("Get room messages error:", error);
-      res.status(500).json({ message: "Failed to get room messages" });
     }
   });
 
