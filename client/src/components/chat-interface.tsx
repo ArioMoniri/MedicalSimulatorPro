@@ -29,6 +29,7 @@ interface Message {
   username?: string;
   createdAt?: string | Date;
   isTyping?: boolean;
+  isAssistant?: boolean;
 }
 
 interface Room {
@@ -209,7 +210,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         content: "Medical Assistant is typing...",
         createdAt: new Date(),
         username: "System",
-        isTyping: true
+        isTyping: true,
+        isAssistant: true
       }]);
 
       const response = await fetch("/api/assistant/message", {
@@ -236,7 +238,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           content: content,
           createdAt: new Date(),
           username: "Medical Assistant",
-          isTyping: false
+          isTyping: false,
+          isAssistant: true
         }];
       });
 
@@ -378,7 +381,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
 
   useEffect(() => {
     if (roomMessagesData) {
-      // Sort messages by createdAt in ascending order (oldest first)
       const sortedMessages = [...roomMessagesData].sort((a, b) => {
         const dateA = new Date(a.createdAt || 0).getTime();
         const dateB = new Date(b.createdAt || 0).getTime();
@@ -386,27 +388,53 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       });
 
       const newMessages: Message[] = sortedMessages.map((msg) => {
-        // Parse vital signs from assistant messages
+        // For system messages (join/leave/typing)
+        if (msg.content.includes("joined the room") ||
+            msg.content.includes("left the room") ||
+            msg.content.includes("is typing")) {
+          return {
+            id: msg.id,
+            role: "assistant",
+            content: msg.content,
+            createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+            username: msg.username || "System",
+            isTyping: msg.content.includes("is typing"),
+            isAssistant: true
+          };
+        }
+
+        // For AI assistant messages
         if (msg.isAssistant) {
+          // Parse vital signs from AI responses
           const vitals = parseVitalSigns(msg.content);
           if (vitals) {
             setLatestVitals(vitals);
           }
+
+          return {
+            id: msg.id,
+            role: "assistant",
+            content: msg.content,
+            createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+            username: msg.username || "Medical Assistant",
+            isTyping: false,
+            isAssistant: true
+          };
         }
 
+        // For user messages
         return {
           id: msg.id,
-          role: msg.isAssistant ? "assistant" : "user",
+          role: "user",
           content: msg.content,
           createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-          username: msg.isAssistant ?
-            (msg.content.includes("is typing") ? "System" : "Medical Assistant") :
-            msg.username || "Unknown User",
-          isTyping: msg.content.includes("is typing")
+          username: msg.username,
+          isTyping: false,
+          isAssistant: false
         };
       });
 
-      // Filter out old typing indicators when new messages arrive
+      // Filter out old typing indicators
       const filteredMessages = newMessages.filter((msg, index) => {
         if (msg.isTyping) {
           const nextMsg = newMessages[index + 1];
@@ -552,6 +580,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       content: input,
       username: user?.username,
       createdAt: new Date(),
+      isAssistant: false
     };
 
     setMessages(prev => [...prev, newMessage]);
@@ -580,6 +609,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       content: transcript,
       username: user?.username,
       createdAt: new Date(),
+      isAssistant: false
     };
 
     setMessages([...messages, newMessage]);
@@ -630,6 +660,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         content: `[Image uploaded: ${file.name}]`,
         username: user?.username,
         createdAt: new Date(),
+        isAssistant: false
       };
 
       setMessages([...messages, newMessage]);
@@ -902,6 +933,11 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                       </ReactMarkdown>
                     )}
                   </div>
+                  {message.createdAt && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {new Date(message.createdAt).toLocaleTimeString()}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

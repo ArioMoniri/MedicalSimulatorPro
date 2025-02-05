@@ -55,8 +55,15 @@ declare global {
   }
 }
 
+// Store sessions in memory
+let sessionStore: any;
+
 export function setupAuth(app: Express) {
   const MemoryStore = createMemoryStore(session);
+  sessionStore = new MemoryStore({
+    checkPeriod: 86400000, // prune expired entries every 24h
+  });
+
   const sessionSettings: session.SessionOptions = {
     secret: process.env.REPL_ID || "acisimu-2025",
     resave: false,
@@ -65,9 +72,7 @@ export function setupAuth(app: Express) {
       maxAge: SESSION_DURATION.STANDARD,
       secure: false, // Set to false for development
     },
-    store: new MemoryStore({
-      checkPeriod: 86400000, // prune expired entries every 24h
-    }),
+    store: sessionStore,
   };
 
   // Remove production check for now to ensure cookies work
@@ -335,7 +340,7 @@ export function setupAuth(app: Express) {
   });
 }
 
-// Add WebSocket-specific authentication handling
+// Updated WebSocket authentication handling
 export async function authenticateWebSocket(cookieString: string): Promise<Express.User | null> {
   try {
     // Parse session ID from cookies
@@ -351,7 +356,25 @@ export async function authenticateWebSocket(cookieString: string): Promise<Expre
       return null;
     }
 
-    // Query the user directly from database using session ID
+    // Get session data from session store
+    const getSession = (sid: string): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        sessionStore.get(sid, (err: any, session: any) => {
+          if (err) reject(err);
+          else resolve(session);
+        });
+      });
+    };
+
+    const session = await getSession(sessionId);
+    if (!session || !session.passport || !session.passport.user) {
+      console.error("No user found in session");
+      return null;
+    }
+
+    const userId = session.passport.user;
+
+    // Query the user directly from database using user ID from session
     const [user] = await db
       .select({
         id: users.id,
@@ -360,11 +383,11 @@ export async function authenticateWebSocket(cookieString: string): Promise<Expre
         createdAt: users.createdAt,
       })
       .from(users)
-      .where(eq(users.id, parseInt(sessionId, 10)))
+      .where(eq(users.id, userId))
       .limit(1);
 
     if (!user) {
-      console.error("No user found for session ID:", sessionId);
+      console.error("No user found for ID:", userId);
       return null;
     }
 
