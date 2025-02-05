@@ -4,6 +4,7 @@ import { db } from "@db";
 import { rooms, roomMessages, roomParticipants } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import { authenticateWebSocket } from "./auth";
+import { sendMessage } from "./services/assistant-service";
 
 interface WebSocketMessage {
   type: "join" | "chat" | "leave";
@@ -11,6 +12,7 @@ interface WebSocketMessage {
   userId?: number;
   username?: string;
   content?: string;
+  isAssistant?: boolean;
 }
 
 interface ConnectedClient extends WebSocket {
@@ -113,11 +115,31 @@ export function setupWebSocket(server: Server) {
               content: message.content,
             });
 
+            // Broadcast user message
             broadcastToRoom(ws.roomId, {
               type: "chat",
               content: message.content,
               userId: ws.userId,
               username: ws.username,
+            });
+
+            // Get AI response
+            const assistantResponse = await sendMessage(message.content, "thread_" + ws.roomId.toString());
+
+            // Save AI response to database
+            await db.insert(roomMessages).values({
+              roomId: ws.roomId,
+              userId: 0, // Special ID for assistant
+              content: assistantResponse.content,
+            });
+
+            // Broadcast AI response
+            broadcastToRoom(ws.roomId, {
+              type: "chat",
+              content: assistantResponse.content,
+              userId: 0,
+              username: "Medical Assistant",
+              isAssistant: true,
             });
             break;
 
@@ -139,7 +161,7 @@ export function setupWebSocket(server: Server) {
     });
   });
 
-  function broadcastToRoom(roomId: number, message: WebSocketMessage) {
+  function broadcastToRoom(roomId: number, message: WebSocketMessage & { isAssistant?: boolean }) {
     const roomClients = rooms.get(roomId);
     if (!roomClients) return;
 

@@ -33,9 +33,10 @@ export const rooms = pgTable("rooms", {
   code: text("code").unique().notNull(),
   scenarioId: integer("scenario_id").references(() => scenarios.id).notNull(),
   creatorId: integer("creator_id").references(() => users.id).notNull(),
+  maxParticipants: integer("max_participants").default(4),
   createdAt: timestamp("created_at").defaultNow(),
   endedAt: timestamp("ended_at"),
-  maxParticipants: integer("max_participants").default(4),
+  lastMessageAt: timestamp("last_message_at").defaultNow(),
 });
 
 export const roomParticipants = pgTable("room_participants", {
@@ -52,6 +53,7 @@ export const roomMessages = pgTable("room_messages", {
   userId: integer("user_id").references(() => users.id).notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+  isAssistant: boolean("is_assistant").default(false),
 });
 
 export const userProgress = pgTable("user_progress", {

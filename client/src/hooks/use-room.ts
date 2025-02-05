@@ -8,6 +8,7 @@ interface WebSocketMessage {
   username?: string;
   content?: string;
   message?: string;
+  isAssistant?: boolean;
 }
 
 export function useRoom() {
@@ -135,7 +136,7 @@ export function useRoom() {
   }, [socket, queryClient]);
 
   // Send message to room
-  const sendMessage = useCallback((content: string) => {
+  const sendMessage = useCallback(async (content: string) => {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       console.error("WebSocket is not connected");
       return;

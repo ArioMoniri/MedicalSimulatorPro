@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,140 +22,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
 
-interface Room {
-  id: number;
-  code: string;
-  creatorId: number;
-  endedAt?: Date;
-}
-
-const parseVitalSigns = (content: string): VitalSigns | null => {
-  console.log("Attempting to parse vital signs from:", content);
-
-  // Try to find vital signs in different formats throughout the text
-  const findValue = (text: string, patterns: string[]): string | null => {
-    for (const pattern of patterns) {
-      const regex = new RegExp(pattern, 'i');
-      const match = text.match(regex);
-      if (match && match[1]) {
-        return match[1];
-      }
-    }
-    return null;
-  };
-
-  // Split content into lines and clean them
-  const lines = content.split(/[\n,]/)
-    .map(line => line.trim())
-    .filter(Boolean);
-
-  const vitals: VitalSigns = {};
-
-  // Process each line for vital signs
-  lines.forEach(line => {
-    // Heart Rate patterns
-    const hrPatterns = [
-      'HR:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?',
-      'Heart Rate:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?',
-      'Pulse:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?'
-    ];
-    const hrValue = findValue(line, hrPatterns);
-    if (hrValue) {
-      vitals.hr = parseInt(hrValue);
-      console.log("Found HR:", vitals.hr);
-    }
-
-    // Blood Pressure patterns
-    const bpPatterns = [
-      'BP:?\\s*(\\d+)\\s*/\\s*(\\d+)(?:\\s*(?:mmHg|mm Hg))?',
-      'Blood Pressure:?\\s*(\\d+)\\s*/\\s*(\\d+)(?:\\s*(?:mmHg|mm Hg))?'
-    ];
-    for (const pattern of bpPatterns) {
-      const match = line.match(new RegExp(pattern, 'i'));
-      if (match && match[1] && match[2]) {
-        vitals.bp = {
-          systolic: parseInt(match[1]),
-          diastolic: parseInt(match[2])
-        };
-        console.log("Found BP:", vitals.bp);
-        break;
-      }
-    }
-
-    // Respiratory Rate patterns
-    const rrPatterns = [
-      'RR:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?',
-      'Respiratory Rate:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?',
-      'Resp:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?'
-    ];
-    const rrValue = findValue(line, rrPatterns);
-    if (rrValue) {
-      vitals.rr = parseInt(rrValue);
-      console.log("Found RR:", vitals.rr);
-    }
-
-    // SpO2 patterns
-    const spo2Patterns = [
-      'SpO2:?\\s*(\\d+)\\s*%?',
-      'O2 Sat:?\\s*(\\d+)\\s*%?',
-      'Oxygen Saturation:?\\s*(\\d+)\\s*%?',
-      'SaO2:?\\s*(\\d+)\\s*%?'
-    ];
-    const spo2Value = findValue(line, spo2Patterns);
-    if (spo2Value) {
-      vitals.spo2 = parseInt(spo2Value);
-      console.log("Found SpO2:", vitals.spo2);
-    }
-
-    // Temperature patterns
-    const tempPatterns = [
-      'Temp:?\\s*(\\d+\\.?\\d*)\\s*[°]?C',
-      'Temperature:?\\s*(\\d+\\.?\\d*)\\s*[°]?C',
-      'Temp:?\\s*(\\d+\\.?\\d*)\\s*[°]?F',
-      'Temperature:?\\s*(\\d+\\.?\\d*)\\s*[°]?F'
-    ];
-    const tempValue = findValue(line, tempPatterns);
-    if (tempValue) {
-      vitals.temp = parseFloat(tempValue);
-      console.log("Found Temp:", vitals.temp);
-    }
-  });
-
-  // Look for vital signs in the entire text if not found line by line
-  if (Object.keys(vitals).length === 0) {
-    const fullText = content.replace(/\s+/g, ' ');
-    lines.push(fullText);
-  }
-
-  console.log("Final parsed vitals:", vitals);
-  return Object.keys(vitals).length > 0 ? vitals : null;
-};
-
-const parseScore = (content: string): number | null => {
-  console.log("Attempting to parse score from:", content);
-
-  // Look for score patterns like "Final Score: X/Y" or "Score: X out of Y"
-  const scoreMatch = content.match(/(?:Final\s+)?Score:\s*(\d+)(?:\s*\/\s*|\s+out\s+of\s+)(\d+)/i);
-
-  if (scoreMatch) {
-    const [_, score, total] = scoreMatch;
-    const numericScore = (parseInt(score) / parseInt(total)) * 100;
-    console.log("Found score:", numericScore);
-    return numericScore;
-  }
-
-  // Look for percentage scores
-  const percentMatch = content.match(/Score:\s*(\d+)%/i);
-  if (percentMatch) {
-    const score = parseInt(percentMatch[1]);
-    console.log("Found percentage score:", score);
-    return score;
-  }
-
-  console.log("No score found in content");
-  return null;
-};
-
 interface Message {
   id?: number;
   role: "user" | "assistant";
@@ -164,13 +30,11 @@ interface Message {
   createdAt?: string | Date;
 }
 
-interface ChatHistory {
-  id: string;
-  threadId: string;
-  messages: Message[];
-  createdAt: Date;
-  firstMessage: string;
-  lastMessage: string;
+interface Room {
+  id: number;
+  code: string;
+  creatorId: number;
+  endedAt?: Date;
 }
 
 interface ChatInterfaceProps {
@@ -267,7 +131,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       const lastMessage = messages[messages.length - 1].content;
       let updatedHistory = chatHistory.filter(chat => chat.id !== currentChatId);
 
-      const newChat = {
+      const newChat: ChatHistory = {
         id: currentChatId,
         threadId: threadId || '',
         messages,
@@ -493,41 +357,51 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     }
   }, []);
 
-  // Fetch room messages if in collaborative mode
-  const { data: roomMessages } = useQuery({
+  // Room message fetching
+  const { data: roomMessagesData } = useQuery({
     queryKey: [`/api/rooms/${roomId}/messages`],
     queryFn: () => getRoomMessages(roomId!),
     enabled: !!roomId,
+    refetchInterval: 1000, // Poll every second for new messages
   });
 
   useEffect(() => {
-    if (roomMessages) {
+    if (roomMessagesData) {
       setMessages(
-        roomMessages.map((msg) => ({
+        roomMessagesData.map((msg) => ({
           id: msg.id,
-          role: "user",
+          role: msg.userId === 0 ? "assistant" : "user",
           content: msg.content,
-          createdAt: new Date(msg.createdAt),
-          username: user?.id === msg.userId ? user.username : undefined,
+          createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+          username: msg.userId === 0 ? "Medical Assistant" :
+                    user?.id === msg.userId ? user.username : msg.username,
         }))
       );
     }
-  }, [roomMessages, user]);
+  }, [roomMessagesData, user]);
 
+  // Room management functions
   const handleCreateRoom = async () => {
     try {
       const room = await createRoom({ scenarioId });
-      setRoomId(room.id);
-      setCurrentRoom(room);
+      if (room) {
+        setRoomId(room.id);
+        setCurrentRoom({
+          id: room.id,
+          code: room.code,
+          creatorId: room.creatorId,
+          endedAt: room.endedAt ? new Date(room.endedAt) : undefined
+        });
 
-      if (user) {
-        connectToRoom(room.id, user.id, user.username);
+        if (user) {
+          connectToRoom(room.id, user.id, user.username);
+        }
+
+        toast({
+          title: "Room Created",
+          description: `Share this code with others: ${room.code}`,
+        });
       }
-
-      toast({
-        title: "Room Created",
-        description: `Share this code with others: ${room.code}`,
-      });
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -540,18 +414,25 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const handleJoinRoom = async () => {
     try {
       const room = await joinRoom({ code: roomCode });
-      setRoomId(room.id);
-      setCurrentRoom(room);
+      if (room) {
+        setRoomId(room.id);
+        setCurrentRoom({
+          id: room.id,
+          code: room.code,
+          creatorId: room.creatorId,
+          endedAt: room.endedAt ? new Date(room.endedAt) : undefined
+        });
 
-      if (user) {
-        connectToRoom(room.id, user.id, user.username);
+        if (user) {
+          connectToRoom(room.id, user.id, user.username);
+        }
+
+        setShowJoinDialog(false);
+        toast({
+          title: "Room Joined",
+          description: "Successfully joined the room",
+        });
       }
-
-      setShowJoinDialog(false);
-      toast({
-        title: "Room Joined",
-        description: "Successfully joined the room",
-      });
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -573,6 +454,37 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     }
   };
 
+  const handleEndRoom = async () => {
+    try {
+      const response = await fetch(`/api/rooms/${currentRoom?.id}/end`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      handleLeaveRoom();
+      toast({
+        title: "Room Ended",
+        description: "Room has been ended for all participants",
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (currentRoom && user) {
+      setIsCreator(user.id === currentRoom.creatorId);
+    }
+  }, [currentRoom, user]);
+
   const handleSend = async () => {
     if (!input.trim()) return;
 
@@ -583,13 +495,19 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       createdAt: new Date(),
     };
 
-    setMessages([...messages, newMessage]);
+    setMessages(prev => [...prev, newMessage]);
     setInput("");
 
     if (roomId && isConnected) {
-      sendRoomMessage(input);
+      // Send message to room
+      await sendRoomMessage(input);
     } else if (threadId) {
-      sendMessageMutation.mutate(input);
+      // Send message to AI assistant
+      try {
+        await sendMessageMutation.mutateAsync(input);
+      } catch (error) {
+        console.error("Failed to get AI response:", error);
+      }
     }
   };
 
@@ -677,46 +595,150 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     }
   }, [currentRoom, user]);
 
-  const handleEndRoom = async () => {
-    try {
-      const response = await fetch(`/api/rooms/${currentRoom?.id}/end`, {
-        method: 'POST',
-        credentials: 'include',
-      });
 
-      if (!response.ok) {
-        throw new Error(await response.text());
+  const parseVitalSigns = (content: string): VitalSigns | null => {
+    console.log("Attempting to parse vital signs from:", content);
+
+    // Try to find vital signs in different formats throughout the text
+    const findValue = (text: string, patterns: string[]): string | null => {
+      for (const pattern of patterns) {
+        const regex = new RegExp(pattern, 'i');
+        const match = text.match(regex);
+        if (match && match[1]) {
+          return match[1];
+        }
+      }
+      return null;
+    };
+
+    // Split content into lines and clean them
+    const lines = content.split(/[\n,]/)
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    const vitals: VitalSigns = {};
+
+    // Process each line for vital signs
+    lines.forEach(line => {
+      // Heart Rate patterns
+      const hrPatterns = [
+        'HR:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?',
+        'Heart Rate:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?',
+        'Pulse:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?'
+      ];
+      const hrValue = findValue(line, hrPatterns);
+      if (hrValue) {
+        vitals.hr = parseInt(hrValue);
+        console.log("Found HR:", vitals.hr);
       }
 
-      handleLeaveRoom();
-      toast({
-        title: "Room Ended",
-        description: "Room has been ended for all participants",
-      });
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message,
-      });
+      // Blood Pressure patterns
+      const bpPatterns = [
+        'BP:?\\s*(\\d+)\\s*/\\s*(\\d+)(?:\\s*(?:mmHg|mm Hg))?',
+        'Blood Pressure:?\\s*(\\d+)\\s*/\\s*(\\d+)(?:\\s*(?:mmHg|mm Hg))?'
+      ];
+      for (const pattern of bpPatterns) {
+        const match = line.match(new RegExp(pattern, 'i'));
+        if (match && match[1] && match[2]) {
+          vitals.bp = {
+            systolic: parseInt(match[1]),
+            diastolic: parseInt(match[2])
+          };
+          console.log("Found BP:", vitals.bp);
+          break;
+        }
+      }
+
+      // Respiratory Rate patterns
+      const rrPatterns = [
+        'RR:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?',
+        'Respiratory Rate:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?',
+        'Resp:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?'
+      ];
+      const rrValue = findValue(line, rrPatterns);
+      if (rrValue) {
+        vitals.rr = parseInt(rrValue);
+        console.log("Found RR:", vitals.rr);
+      }
+
+      // SpO2 patterns
+      const spo2Patterns = [
+        'SpO2:?\\s*(\\d+)\\s*%?',
+        'O2 Sat:?\\s*(\\d+)\\s*%?',
+        'Oxygen Saturation:?\\s*(\\d+)\\s*%?',
+        'SaO2:?\\s*(\\d+)\\s*%?'
+      ];
+      const spo2Value = findValue(line, spo2Patterns);
+      if (spo2Value) {
+        vitals.spo2 = parseInt(spo2Value);
+        console.log("Found SpO2:", vitals.spo2);
+      }
+
+      // Temperature patterns
+      const tempPatterns = [
+        'Temp:?\\s*(\\d+\\.?\\d*)\\s*[°]?C',
+        'Temperature:?\\s*(\\d+\\.?\\d*)\\s*[°]?C',
+        'Temp:?\\s*(\\d+\\.?\\d*)\\s*[°]?F',
+        'Temperature:?\\s*(\\d+\\.?\\d*)\\s*[°]?F'
+      ];
+      const tempValue = findValue(line, tempPatterns);
+      if (tempValue) {
+        vitals.temp = parseFloat(tempValue);
+        console.log("Found Temp:", vitals.temp);
+      }
+    });
+
+    // Look for vital signs in the entire text if not found line by line
+    if (Object.keys(vitals).length === 0) {
+      const fullText = content.replace(/\s+/g, ' ');
+      lines.push(fullText);
     }
+
+    console.log("Final parsed vitals:", vitals);
+    return Object.keys(vitals).length > 0 ? vitals : null;
   };
+
+  const parseScore = (content: string): number | null => {
+    console.log("Attempting to parse score from:", content);
+
+    // Look for score patterns like "Final Score: X/Y" or "Score: X out of Y"
+    const scoreMatch = content.match(/(?:Final\s+)?Score:\s*(\d+)(?:\s*\/\s*|\s+out\s+of\s+)(\d+)/i);
+
+    if (scoreMatch) {
+      const [_, score, total] = scoreMatch;
+      const numericScore = (parseInt(score) / parseInt(total)) * 100;
+      console.log("Found score:", numericScore);
+      return numericScore;
+    }
+
+    // Look for percentage scores
+    const percentMatch = content.match(/Score:\s*(\d+)%/i);
+    if (percentMatch) {
+      const score = parseInt(percentMatch[1]);
+      console.log("Found percentage score:", score);
+      return score;
+    }
+
+    console.log("No score found in content");
+    return null;
+  };
+
+  interface ChatHistory {
+    id: string;
+    threadId: string;
+    messages: Message[];
+    createdAt: Date;
+    firstMessage: string;
+    lastMessage: string;
+  }
 
   return (
     <div className="space-y-6">
       <Card className="h-[600px] flex flex-col">
-        <CardContent className="flex-none p-4 border-b">
-          <div className="flex justify-between items-center">
-            <h3 className="font-semibold">Chat Interface</h3>
+        <CardHeader>
+          <CardTitle className="flex justify-between items-center">
+            <span>Chat Interface</span>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleNewChat}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                New Chat
-              </Button>
               {!roomId ? (
                 <>
                   <Button
@@ -760,8 +782,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                 </div>
               )}
             </div>
-          </div>
-        </CardContent>
+          </CardTitle>
+        </CardHeader>
 
         <ScrollArea className="flex-1 p-4">
           <div className="space-y-4">
@@ -774,7 +796,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
               >
                 {message.role === "assistant" && (
                   <Avatar className="h-8 w-8 mr-2">
-                    <AvatarImage src="/assistant-profile.jpeg" alt="Assistant" />
+                    <AvatarImage src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xNyAyMXYtMmE0IDQgMCAwIDAtNC00SDVhNCA0IDAgMCAwLTQgNHYyIj48L3BhdGg+PGNpcmNsZSBjeD0iOSIgY3k9IjciIHI9IjQiPjwvY2lyY2xlPjxwYXRoIGQ9Ik0yMyAyMXYtMmE0IDQgMCAwIDAtMy0zLjg3Ij48L3BhdGg+PHBhdGggZD0iTTE2IDMuMTNhNCA0IDAgMCAxIDAgNy47NSI+PC9wYXRoPjwvc3ZnPg==" alt="Assistant" />
                     <AvatarFallback>AI</AvatarFallback>
                   </Avatar>
                 )}
@@ -790,7 +812,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                       {message.username}
                     </div>
                   )}
-                  <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap break-words">
+                  <div className="whitespace-pre-wrap break-words">
                     <ReactMarkdown
                       components={{
                         p: ({ children }) => <p className="mb-2">{children}</p>,
@@ -811,13 +833,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                 </div>
               </div>
             ))}
-            {isTyping && (
-              <div className="flex justify-start">
-                <div className="rounded-lg px-4 py-2 bg-muted">
-                  <TypingIndicator />
-                </div>
-              </div>
-            )}
+            {isTyping && <TypingIndicator />}
           </div>
         </ScrollArea>
 
@@ -829,7 +845,12 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
               placeholder="Type your message..."
               onKeyPress={(e) => e.key === "Enter" && handleSend()}
             />
-            <VoiceInput onTranscript={handleVoiceInput} />
+            <Button
+              onClick={handleSend}
+              disabled={!input.trim() || isTyping}
+            >
+              <Send className="h-4 w-4" />
+            </Button>
             <div className="relative">
               <input
                 id="image-upload"
@@ -851,13 +872,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                 <Upload className="h-4 w-4" />
               </Button>
             </div>
-            <Button
-              size="icon"
-              onClick={handleSend}
-              disabled={sendMessageMutation.isPending || isTyping}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
+            <VoiceInput onTranscript={handleVoiceInput} />
           </div>
         </CardContent>
       </Card>

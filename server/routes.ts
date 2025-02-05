@@ -10,8 +10,10 @@ import { translateMedicalTerm, getATLSGuidelines } from "./services/openai";
 import { createThread, sendMessage } from "./services/assistant-service";
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
-import path from 'path';
-import fs from 'fs/promises';
+import path from "path";
+import fs from "fs/promises";
+
+const ASSISTANT_USER_ID = 0; // Special ID for assistant messages
 
 export function registerRoutes(app: Express): Server {
   // Setup authentication first
@@ -104,6 +106,16 @@ export function registerRoutes(app: Express): Server {
         })
         .returning();
 
+      // Create initial room message
+      await db.insert(roomMessages)
+        .values({
+          roomId: room.id,
+          userId: ASSISTANT_USER_ID,
+          content: "Welcome to the simulation room! You can start your discussion.",
+          createdAt: new Date(),
+          isAssistant: true
+        });
+
       res.json(room);
     } catch (error) {
       console.error("Create room error:", error);
@@ -137,21 +149,38 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Count active participants
-      const activeParticipants = await db.select({
-        count: sql<number>`count(*)::integer`
-      })
-      .from(roomParticipants)
-      .where(
-        and(
-          eq(roomParticipants.roomId, room.id),
-          eq(roomParticipants.leftAt, null)
-        )
-      );
+      const participants = await db.select()
+        .from(roomParticipants)
+        .where(
+          and(
+            eq(roomParticipants.roomId, room.id),
+            sql`${roomParticipants.leftAt} IS NULL`
+          )
+        );
 
-      const participantCount = activeParticipants[0].count;
-
-      if (participantCount >= (room.maxParticipants ?? 4)) {
+      if (participants.length >= (room.maxParticipants ?? 4)) {
         return res.status(400).json({ message: "Room is full" });
+      }
+
+      // Add participant to room if not already joined
+      const existingParticipant = participants.find(p => p.userId === req.user!.id);
+      if (!existingParticipant) {
+        await db.insert(roomParticipants)
+          .values({
+            roomId: room.id,
+            userId: req.user.id,
+            joinedAt: new Date(),
+          });
+
+        // Add system message about user joining
+        await db.insert(roomMessages)
+          .values({
+            roomId: room.id,
+            userId: ASSISTANT_USER_ID,
+            content: `${req.user.username} has joined the room.`,
+            createdAt: new Date(),
+            isAssistant: true
+          });
       }
 
       res.json(room);
