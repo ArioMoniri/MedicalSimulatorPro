@@ -21,6 +21,7 @@ import { Send, Upload, Users, Plus } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
+import WelcomeBadge from './WelcomeBadge';
 
 interface Message {
   id?: number;
@@ -57,6 +58,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const [scenarios, setScenarios] = useState<any[] | null>(null);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [isCreator, setIsCreator] = useState(false);
+  const [showWelcomeBadge, setShowWelcomeBadge] = useState(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -89,7 +91,17 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     leaveRoom,
   } = useRoom();
 
-  // Load chat history
+  useEffect(() => {
+    if (user) {
+      setShowWelcomeBadge(true);
+      const timer = setTimeout(() => {
+        setShowWelcomeBadge(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [user]);
+
+
   useEffect(() => {
     const loadHistory = () => {
       const history = localStorage.getItem(`chat_history_list_${user?.id}_${scenarioId}`);
@@ -97,7 +109,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         setChatHistory(JSON.parse(history));
       }
 
-      // Load current chat if exists
       const currentId = localStorage.getItem(`current_chat_${user?.id}_${scenarioId}`);
       if (currentId) {
         setCurrentChatId(currentId);
@@ -115,10 +126,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     }
   }, [user?.id, scenarioId]);
 
-  // Save chat history
   useEffect(() => {
     if (user?.id && currentChatId && messages.length > 0) {
-      // Save current chat with threadId
       const chatData = {
         messages,
         threadId,
@@ -128,7 +137,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         JSON.stringify(chatData)
       );
 
-      // Update history list, preventing duplicates
       const firstMessage = messages[0].content;
       const lastMessage = messages[messages.length - 1].content;
       let updatedHistory = chatHistory.filter(chat => chat.id !== currentChatId);
@@ -150,7 +158,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         JSON.stringify(updatedHistory)
       );
 
-      // Save current chat id
       localStorage.setItem(
         `current_chat_${user?.id}_${scenarioId}`,
         currentChatId
@@ -159,7 +166,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   }, [messages, currentChatId, user?.id, scenarioId, threadId, chatHistory]);
 
 
-  // Create thread mutation
   const createThreadMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/assistant/thread", {
@@ -180,7 +186,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     },
   });
 
-  // Add new mutation for saving vital signs
   const saveVitalSignsMutation = useMutation({
     mutationFn: async (vitals: VitalSigns & { threadId: string }) => {
       const response = await fetch("/api/vital-signs", {
@@ -201,10 +206,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     },
   });
 
-  // Update the message handler to save vital signs
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
-      // Show typing indicator before making request
       setMessages(prev => [...prev, {
         role: "assistant",
         content: "Medical Assistant is typing...",
@@ -230,7 +233,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       const content = data.content;
       console.log("Received message:", content);
 
-      // Replace typing indicator with actual message
       setMessages(prev => {
         const filtered = prev.filter(msg => !msg.isTyping);
         return [...filtered, {
@@ -243,7 +245,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         }];
       });
 
-      // Parse vital signs from response
       const vitals = parseVitalSigns(content);
       if (vitals) {
         console.log("Found new vitals:", vitals);
@@ -257,7 +258,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         }
       }
 
-      // Parse score if present
       const score = parseScore(content);
       if (score !== null && scenarioId) {
         updateProgress.mutate({
@@ -269,7 +269,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       }
     },
     onError: (error: Error) => {
-      // Remove typing indicator on error
       setMessages(prev => prev.filter(msg => !msg.isTyping));
       toast({
         variant: "destructive",
@@ -279,7 +278,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     },
   });
 
-  // Add mutation for updating progress
   const updateProgress = useMutation({
     mutationFn: async (data: { scenarioId: number; score: number; threadId: string, feedback: string }) => {
       const response = await fetch("/api/progress", {
@@ -291,7 +289,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       return response.json();
     },
     onSuccess: () => {
-      // Invalidate and refetch progress data
       queryClient.invalidateQueries({ queryKey: ["/api/progress"] });
     },
     onError: (error: Error) => {
@@ -303,7 +300,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     },
   });
 
-  // Add query for loading vital signs history
   const { data: vitalSignsHistory } = useQuery({
     queryKey: [`/api/vital-signs/${threadId}`],
     queryFn: async () => {
@@ -315,17 +311,14 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     enabled: !!threadId,
   });
 
-  // Start new chat
   const handleNewChat = async () => {
     const newChatId = Date.now().toString();
     setCurrentChatId(newChatId);
     setMessages([]);
-    setLatestVitals({}); // Reset vital signs for new chat
+    setLatestVitals({}); 
 
-    // Create new thread
     createThreadMutation.mutate();
 
-    // Add to history
     const newChat: ChatHistory = {
       id: newChatId,
       threadId: '',
@@ -338,17 +331,15 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     setChatHistory(prev => [newChat, ...prev]);
   };
 
-  // Update handleLoadChat to load vital signs history
   const handleLoadChat = (chatId: string) => {
     setCurrentChatId(chatId);
-    setLatestVitals({}); // Reset vitals before loading chat
+    setLatestVitals({}); 
     const savedChat = localStorage.getItem(`chat_${user?.id}_${scenarioId}_${chatId}`);
     if (savedChat) {
       const chatData = JSON.parse(savedChat);
       setMessages(chatData.messages);
       setThreadId(chatData.threadId);
 
-      // Parse vital signs from the loaded messages
       const lastMessageWithVitals = [...chatData.messages].reverse()
         .find(msg => {
           const vitals = parseVitalSigns(msg.content);
@@ -364,19 +355,17 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     }
   };
 
-  // Initialize thread when component mounts
   useEffect(() => {
     if (!threadId && !currentChatId) {
       handleNewChat();
     }
   }, []);
 
-  // Room message fetching
   const { data: roomMessagesData } = useQuery({
     queryKey: [`/api/rooms/${roomId}/messages`],
     queryFn: () => getRoomMessages(roomId!),
     enabled: !!roomId,
-    refetchInterval: 1000, // Poll every second for new messages
+    refetchInterval: 1000, 
   });
 
   useEffect(() => {
@@ -387,7 +376,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         return dateA - dateB;
       });
 
-      // Process all messages for vital signs
       sortedMessages.forEach(msg => {
         if (msg.isAssistant) {
           const vitals = parseVitalSigns(msg.content);
@@ -398,7 +386,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       });
 
       const newMessages: Message[] = sortedMessages.map((msg) => {
-        // For system messages (join/leave/typing)
         if (msg.content.includes("joined the room") ||
             msg.content.includes("left the room") ||
             msg.content.includes("is typing")) {
@@ -413,9 +400,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           };
         }
 
-        // For AI assistant messages
         if (msg.isAssistant) {
-          // Parse vital signs from AI responses
           const vitals = parseVitalSigns(msg.content);
           if (vitals) {
             setLatestVitals(vitals);
@@ -432,7 +417,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           };
         }
 
-        // For user messages
         return {
           id: msg.id,
           role: "user",
@@ -444,7 +428,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         };
       });
 
-      // Filter out old typing indicators
       const filteredMessages = newMessages.filter((msg, index) => {
         if (msg.isTyping) {
           const nextMsg = newMessages[index + 1];
@@ -457,7 +440,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     }
   }, [roomMessagesData]);
 
-  // Room management functions
   const handleCreateRoom = async () => {
     try {
       const room = await createRoom({ scenarioId });
@@ -470,7 +452,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           endedAt: room.endedAt ? new Date(room.endedAt) : undefined
         });
 
-        // Create new thread for AI interactions
         const threadResponse = await fetch("/api/assistant/thread", {
           method: "POST",
         });
@@ -510,7 +491,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           endedAt: room.endedAt ? new Date(room.endedAt) : undefined
         });
 
-        // Create new thread for AI interactions
         const threadResponse = await fetch("/api/assistant/thread", {
           method: "POST",
         });
@@ -615,10 +595,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     setInput("");
 
     if (roomId && isConnected) {
-      // Send message to room
       await sendRoomMessage(input);
     } else if (threadId) {
-      // Send message to AI assistant
       try {
         await sendMessageMutation.mutateAsync(input);
       } catch (error) {
@@ -631,7 +609,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     if (!transcript.trim()) return;
     setInput(transcript);
 
-    // Automatically send the voice transcript
     const newMessage: Message = {
       role: "user",
       content: transcript,
@@ -654,7 +631,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast({
         variant: "destructive",
@@ -664,7 +640,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       return;
     }
 
-    // Create FormData
     const formData = new FormData();
     formData.append('image', file);
     formData.append('threadId', threadId || '');
@@ -682,7 +657,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
 
       const data = await response.json();
 
-      // Add image message to chat
       const newMessage: Message = {
         role: "user",
         content: `[Image uploaded: ${file.name}]`,
@@ -693,7 +667,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
 
       setMessages([...messages, newMessage]);
 
-      // Process assistant response
       if (threadId) {
         sendMessageMutation.mutate(`I've uploaded an image named ${file.name}. Please analyze it.`);
       }
@@ -717,34 +690,22 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const parseVitalSigns = (content: string): VitalSigns | null => {
     console.log("Attempting to parse vital signs from:", content);
 
-    // Clean up markdown bullet points and other special characters
     const cleanContent = content
-      .replace(/[•*-]\s+/g, '')  // Remove bullet points and their spaces
-      .replace(/\([^)]*\)/g, '') // Remove parenthetical statements
-      .replace(/\s+/g, ' ')      // Normalize whitespace
+      .replace(/[•*-]\s+/g, '')  
+      .replace(/\([^)]*\)/g, '') 
+      .replace(/\s+/g, ' ')      
       .trim();
 
     const vitals: VitalSigns = {};
 
-    // Define regex patterns with more flexible matching
     const patterns = {
-      // Matches e.g. "HR: 140 bpm" or "(hr): 140"
-      hr: /\(?\s*(?:hr|heart rate)\s*\)?\s*:?\s*(\d+)(?:\s*bpm)?/i,
-
-      // Matches e.g. "BP: 90/60 mmHg" or "(Blood Pressure): 90/60"
-      BP: /\(?\s*(?:bp|blood pressure)\s*\)?\s*:?\s*(\d+)\s*\/\s*(\d+)(?:\s*(?:mmhg|mm hg))?/i,
-
-      // Matches e.g. "RR: 28" or "(Respiratory Rate): 28"
-      rr: /\(?\s*(?:rr|respiratory rate|resp)\s*\)?\s*:?\s*(\d+)(?:\s*(?:breaths\/min|\/min|bpm))?/i,
-
-      // Matches e.g. "SpO2: 91%" or "(oxygen saturation): 91"
-      spo2: /\(?\s*(?:spo2|o2 sat|oxygen saturation|sao2)\s*\)?\s*:?\s*(\d+)\s*%?/i,
-
-      // Matches e.g. "Temp: 36.5°C" or "(temperature): 36.5"
-      temp: /\(?\s*(?:temp|temperature)\s*\)?\s*:?\s*([\d.]+)(?:\s*[°]?\s*[CF])?/i
+      hr: /\(?\s*(?:hr:.*?|hr|heart rate|Heart Rate (HR))\s*\)?\s*:?\s*(\d+)(?:\s*bpm)?/i,
+      bp: /\(?\s*(?:• bp:.*?|Blood Pressure (BP)|bp|blood pressure)\s*\)?\s*:?\s*(\d+)\s*\/\s*(\d+)(?:\s*(?:mmhg|mm hg))?/i,
+      rr: /\(?\s*(?:rr:.*?|Respiratory Rate (RR)|rr|respiratory rate|resp)\s*\)?\s*:?\s*(\d+)(?:\s*(?:breaths\/min|\/min|bpm))?/i,
+      spo2: /\(?\s*(?:spo.*?|spo2|o2 sat|oxygen saturation|sao2)\s*\)?\s*:?\s*(\d+)\s*%?/i,
+      temp: /\(?\s*(?:temp.*?|temp|temperature|Temperature)\s*\)?\s*:?\s*([\d.]+)(?:\s*[°]?\s*[CF])?/i
     };
 
-    // Extract vital signs
     const hrMatch = cleanContent.match(patterns.hr);
     if (hrMatch) {
       vitals.hr = parseInt(hrMatch[1]);
@@ -778,7 +739,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       console.log("Found Temp:", vitals.temp);
     }
 
-    // If no vitals found, try splitting by common delimiters and process each part
     if (Object.keys(vitals).length === 0) {
       const parts = cleanContent.split(/[,•]/).map(part => part.trim());
       parts.forEach(part => {
@@ -812,7 +772,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const parseScore = (content: string): number | null => {
     console.log("Attempting to parse score from:", content);
 
-    // Look for score patterns like "Final Score: X/Y" or "Score: X out of Y"
     const scoreMatch = content.match(/(?:Final\s+)?Score:\s*(\d+)(?:\s*\/\s*|\s+out\s+of\s+)(\d+)/i);
 
     if (scoreMatch) {
@@ -822,7 +781,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       return numericScore;
     }
 
-    // Look for percentage scores
     const percentMatch = content.match(/Score:\s*(\d+)%/i);
     if (percentMatch) {
       const score = parseInt(percentMatch[1]);
@@ -845,6 +803,12 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
 
   return (
     <div className="space-y-6">
+      {showWelcomeBadge && user && (
+        <WelcomeBadge 
+          username={user.username}
+          onDismiss={() => setShowWelcomeBadge(false)}
+        />
+      )}
       <Card className="h-[600px] flex flex-col">
         <CardHeader>
           <CardTitle className="flex justify-between items-center">
@@ -1005,7 +969,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         </CardContent>
       </Card>
 
-      {/* Vital Signs Monitor */}
       <VitalSignsMonitor latestVitals={latestVitals} />
 
       {chatHistory.length > 0 && (
@@ -1029,7 +992,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                         {new Date(chat.createdAt).toLocaleString()}
                       </span>
                     </div>
-                  </Button>
+                  </                  </Button>
                 ))}
               </div>
             </ScrollArea>
