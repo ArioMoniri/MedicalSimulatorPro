@@ -13,6 +13,7 @@ interface WebSocketMessage {
 export function useRoom() {
   const queryClient = useQueryClient();
   const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   // Create a new room
   const createRoom = useMutation({
@@ -25,7 +26,8 @@ export function useRoom() {
       });
 
       if (!res.ok) {
-        throw new Error(await res.text());
+        const error = await res.text();
+        throw new Error(error);
       }
 
       return res.json() as Promise<Room>;
@@ -43,7 +45,8 @@ export function useRoom() {
       });
 
       if (!res.ok) {
-        throw new Error(await res.text());
+        const error = await res.text();
+        throw new Error(error);
       }
 
       return res.json() as Promise<Room>;
@@ -69,50 +72,67 @@ export function useRoom() {
       socket.close();
     }
 
-    const wsUrl = new URL(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/ws`);
-    const ws = new WebSocket(wsUrl.toString(), {
-      headers: {
-        'X-User-ID': userId.toString()
-      }
-    });
+    setIsConnecting(true);
 
-    ws.onopen = () => {
-      console.log("WebSocket connection established");
-      ws.send(JSON.stringify({
-        type: "join",
-        roomId,
-        userId,
-        username,
-      }));
-    };
+    try {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
+      const ws = new WebSocket(wsUrl);
 
-    ws.onmessage = (event) => {
-      const message: WebSocketMessage = JSON.parse(event.data);
-      console.log("WebSocket message received:", message);
+      // Add user info to query parameters instead of headers
+      ws.onopen = () => {
+        console.log("WebSocket connection established");
+        ws.send(JSON.stringify({
+          type: "join",
+          roomId,
+          userId,
+          username,
+        }));
+        setIsConnecting(false);
+      };
 
-      switch (message.type) {
-        case "chat":
-        case "user_joined":
-        case "user_left":
-          // Invalidate room messages query to trigger refetch
-          queryClient.invalidateQueries({ queryKey: [`/api/rooms/${roomId}/messages`] });
-          break;
-        case "error":
-          console.error("WebSocket error:", message.message);
-          break;
-      }
-    };
+      ws.onmessage = (event) => {
+        const message: WebSocketMessage = JSON.parse(event.data);
+        console.log("WebSocket message received:", message);
 
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
+        switch (message.type) {
+          case "chat":
+          case "user_joined":
+          case "user_left":
+            // Invalidate room messages query to trigger refetch
+            queryClient.invalidateQueries({ queryKey: [`/api/rooms/${roomId}/messages`] });
+            break;
+          case "error":
+            console.error("WebSocket error:", message.message);
+            break;
+        }
+      };
 
-    setSocket(ws);
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        setIsConnecting(false);
+      };
 
-    return () => {
-      ws.close();
-      setSocket(null);
-    };
+      ws.onclose = () => {
+        console.log("WebSocket connection closed");
+        setIsConnecting(false);
+        setSocket(null);
+      };
+
+      setSocket(ws);
+
+      return () => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "leave" }));
+        }
+        ws.close();
+        setSocket(null);
+      };
+    } catch (error) {
+      console.error("Failed to connect to WebSocket:", error);
+      setIsConnecting(false);
+      return () => {};
+    }
   }, [socket, queryClient]);
 
   // Send message to room
@@ -128,12 +148,25 @@ export function useRoom() {
     }));
   }, [socket]);
 
+  // Leave room
+  const leaveRoom = useCallback(() => {
+    if (socket) {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: "leave" }));
+      }
+      socket.close();
+      setSocket(null);
+    }
+  }, [socket]);
+
   return {
     createRoom: createRoom.mutateAsync,
     joinRoom: joinRoom.mutateAsync,
     getRoomMessages,
     connectToRoom,
     sendMessage,
+    leaveRoom,
     isConnected: socket?.readyState === WebSocket.OPEN,
+    isConnecting,
   };
 }

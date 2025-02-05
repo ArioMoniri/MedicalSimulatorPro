@@ -22,6 +22,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
 
+interface Room {
+  id: number;
+  code: string;
+}
+
 const parseVitalSigns = (content: string): VitalSigns | null => {
   console.log("Attempting to parse vital signs from:", content);
 
@@ -181,8 +186,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [latestVitals, setLatestVitals] = useState<VitalSigns>({});
-  
   const [scenarios, setScenarios] = useState<any[] | null>(null);
+  const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -191,7 +196,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         const response = await fetch("/api/scenarios");
         if (response.ok) {
           const data = await response.json();
-           setScenarios(data);
+          setScenarios(data);
         } else {
           console.error("Failed to fetch scenarios");
         }
@@ -212,6 +217,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     connectToRoom,
     sendMessage: sendRoomMessage,
     isConnected,
+    leaveRoom,
   } = useRoom();
 
   // Load chat history
@@ -221,7 +227,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       if (history) {
         setChatHistory(JSON.parse(history));
       }
-    
+
       // Load current chat if exists
       const currentId = localStorage.getItem(`current_chat_${user?.id}_${scenarioId}`);
       if (currentId) {
@@ -326,15 +332,15 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     },
   });
 
-    // Update the message handler to save vital signs
+  // Update the message handler to save vital signs
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       setIsTyping(true);
       const response = await fetch("/api/assistant/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          content, 
+        body: JSON.stringify({
+          content,
           threadId,
           simulationType: scenarios?.find(s => s.id === scenarioId)?.type || "emergency"
         }),
@@ -390,7 +396,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         description: error.message,
       });
     },
-});
+  });
 
   // Add mutation for updating progress
   const updateProgress = useMutation({
@@ -415,7 +421,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       });
     },
   });
-  
+
   // Add query for loading vital signs history
   const { data: vitalSignsHistory } = useQuery({
     queryKey: [`/api/vital-signs/${threadId}`],
@@ -509,6 +515,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     try {
       const room = await createRoom({ scenarioId });
       setRoomId(room.id);
+      setCurrentRoom(room);
 
       if (user) {
         connectToRoom(room.id, user.id, user.username);
@@ -531,17 +538,34 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     try {
       const room = await joinRoom({ code: roomCode });
       setRoomId(room.id);
+      setCurrentRoom(room);
 
       if (user) {
         connectToRoom(room.id, user.id, user.username);
       }
 
       setShowJoinDialog(false);
+      toast({
+        title: "Room Joined",
+        description: "Successfully joined the room",
+      });
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Error",
         description: error.message,
+      });
+    }
+  };
+
+  const handleLeaveRoom = () => {
+    if (roomId) {
+      leaveRoom();
+      setRoomId(null);
+      setCurrentRoom(null);
+      toast({
+        title: "Left Room",
+        description: "Successfully left the room",
       });
     }
   };
@@ -677,9 +701,18 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                   </Button>
                 </>
               ) : (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Users className="h-4 w-4" />
-                  <span>Collaborative Mode</span>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Users className="h-4 w-4" />
+                    <span>Room Code: {currentRoom?.code}</span>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleLeaveRoom}
+                  >
+                    Leave Room
+                  </Button>
                 </div>
               )}
             </div>
@@ -774,8 +807,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                 <Upload className="h-4 w-4" />
               </Button>
             </div>
-            <Button 
-              size="icon" 
+            <Button
+              size="icon"
               onClick={handleSend}
               disabled={sendMessageMutation.isPending || isTyping}
             >
