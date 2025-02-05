@@ -50,7 +50,7 @@ export const roomParticipants = pgTable("room_participants", {
 export const roomMessages = pgTable("room_messages", {
   id: serial("id").primaryKey(),
   roomId: integer("room_id").references(() => rooms.id).notNull(),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  userId: integer("user_id").notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   isAssistant: boolean("is_assistant").default(false),
