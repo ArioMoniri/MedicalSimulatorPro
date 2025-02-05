@@ -6,12 +6,21 @@ import {
   CuboidCollider, 
   Physics, 
   RigidBody,
-  RigidBodyApi,
   useRopeJoint, 
   useSphericalJoint 
 } from '@react-three/rapier';
 import { MeshLineGeometry, MeshLineMaterial } from 'meshline';
 import { Text, Environment } from '@react-three/drei';
+
+// Extend JSX.IntrinsicElements with meshLine types
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      meshLineGeometry: any;
+      meshLineMaterial: any;
+    }
+  }
+}
 
 extend({ MeshLineGeometry, MeshLineMaterial });
 
@@ -62,11 +71,21 @@ export default function WelcomeBadge({ username, onClose }: WelcomeBadgeProps) {
         left: 0,
         width: '100%',
         height: '100%',
-        zIndex: 1000,
-        pointerEvents: 'none'
+        zIndex: 9999, // Increased z-index
+        pointerEvents: 'all', 
+        backgroundColor: 'rgba(0,0,0,0.5)' 
       }}
     >
-      <Canvas camera={{ position: [0, 0, 13], fov: 25 }}>
+      <Canvas 
+        camera={{ position: [0, 0, 13], fov: 25 }}
+        style={{ 
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%'
+        }}
+      >
         <color attach="background" args={['transparent']} />
         <ambientLight intensity={Math.PI} />
         <Physics interpolate gravity={[0, -40, 0]} timeStep={1 / 60}>
@@ -80,11 +99,11 @@ export default function WelcomeBadge({ username, onClose }: WelcomeBadgeProps) {
 
 function Badge({ username }: { username: string }) {
   const band = useRef<THREE.Mesh>(null);
-  const fixed = useRef<RigidBodyApi>(null);
-  const j1 = useRef<RigidBodyApi>(null);
-  const j2 = useRef<RigidBodyApi>(null);
-  const j3 = useRef<RigidBodyApi>(null);
-  const card = useRef<RigidBodyApi>(null);
+  const fixed = useRef<any>(null);
+  const j1 = useRef<any>(null);
+  const j2 = useRef<any>(null);
+  const j3 = useRef<any>(null);
+  const card = useRef<any>(null);
 
   const vec = new THREE.Vector3();
   const ang = new THREE.Vector3();
@@ -103,9 +122,9 @@ function Badge({ username }: { username: string }) {
   const [hovered, hover] = useState(false);
 
   const segmentProps = {
-    type: 'dynamic',
+    type: 'dynamic' as const,
     canSleep: true,
-    colliders: false,
+    colliders: 'ball' as const,
     angularDamping: 2,
     linearDamping: 2
   };
@@ -143,7 +162,8 @@ function Badge({ username }: { username: string }) {
         ref.current.lerped.lerp(ref.current.translation(), 0.016 * (10 + clampedDistance * 40));
       });
 
-      if (j3.current?.translation && j2.current?.translation && j1.current?.translation && band.current) {
+      // Update curve points for the band
+      if (band.current && j3.current?.translation) {
         curve.points[0].copy(j3.current.translation());
         curve.points[1].copy(j2.current.lerped);
         curve.points[2].copy(j1.current.lerped);
@@ -229,7 +249,6 @@ function Badge({ username }: { username: string }) {
               color="black"
               anchorX="center"
               anchorY="middle"
-              font="/fonts/inter-bold.woff"
             >
               {username}
             </Text>
