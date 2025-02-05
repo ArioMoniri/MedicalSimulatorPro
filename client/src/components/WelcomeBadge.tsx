@@ -11,7 +11,7 @@ import {
   useSphericalJoint 
 } from '@react-three/rapier';
 import { MeshLineGeometry, MeshLineMaterial } from 'meshline';
-import { Text, PerspectiveCamera, Environment, useTexture } from '@react-three/drei';
+import { Text, Environment } from '@react-three/drei';
 
 extend({ MeshLineGeometry, MeshLineMaterial });
 
@@ -102,6 +102,14 @@ function Badge({ username }: { username: string }) {
   const [dragged, drag] = useState<DragState | false>(false);
   const [hovered, hover] = useState(false);
 
+  const segmentProps = {
+    type: 'dynamic',
+    canSleep: true,
+    colliders: false,
+    angularDamping: 2,
+    linearDamping: 2
+  };
+
   useEffect(() => {
     if (hovered) {
       document.body.style.cursor = dragged ? 'grabbing' : 'grab';
@@ -124,22 +132,26 @@ function Badge({ username }: { username: string }) {
         y: vec.y - dragged.y,
         z: vec.z - dragged.z
       });
+      [card, j1, j2, j3, fixed].forEach((ref) => ref.current?.wakeUp());
     }
 
-    if (
-      j3.current?.translation && 
-      j2.current?.translation && 
-      j1.current?.translation && 
-      fixed.current?.translation && 
-      band.current
-    ) {
-      curve.points[0].copy(j3.current.translation());
-      curve.points[1].copy(j2.current.translation());
-      curve.points[2].copy(j1.current.translation());
-      curve.points[3].copy(fixed.current.translation());
+    if (fixed.current) {
+      // Fix most of the jitter when over pulling the card
+      [j1, j2].forEach((ref) => {
+        if (!ref.current.lerped) ref.current.lerped = new THREE.Vector3().copy(ref.current.translation());
+        const clampedDistance = Math.max(0.1, Math.min(1, ref.current.lerped.distanceTo(ref.current.translation())));
+        ref.current.lerped.lerp(ref.current.translation(), 0.016 * (10 + clampedDistance * 40));
+      });
 
-      // @ts-ignore - meshline types are not properly defined
-      band.current.geometry.setPoints(curve.getPoints(32));
+      if (j3.current?.translation && j2.current?.translation && j1.current?.translation && band.current) {
+        curve.points[0].copy(j3.current.translation());
+        curve.points[1].copy(j2.current.lerped);
+        curve.points[2].copy(j1.current.lerped);
+        curve.points[3].copy(fixed.current.translation());
+
+        // @ts-ignore - meshline types are not properly defined
+        band.current.geometry.setPoints(curve.getPoints(32));
+      }
     }
 
     if (card.current) {
@@ -152,19 +164,20 @@ function Badge({ username }: { username: string }) {
   return (
     <>
       <group position={[0, 4, 0]}>
-        <RigidBody ref={fixed} type="fixed" />
-        <RigidBody position={[0.5, 0, 0]} ref={j1}>
+        <RigidBody ref={fixed} {...segmentProps} type="fixed" />
+        <RigidBody position={[0.5, 0, 0]} ref={j1} {...segmentProps}>
           <BallCollider args={[0.1]} />
         </RigidBody>
-        <RigidBody position={[1, 0, 0]} ref={j2}>
+        <RigidBody position={[1, 0, 0]} ref={j2} {...segmentProps}>
           <BallCollider args={[0.1]} />
         </RigidBody>
-        <RigidBody position={[1.5, 0, 0]} ref={j3}>
+        <RigidBody position={[1.5, 0, 0]} ref={j3} {...segmentProps}>
           <BallCollider args={[0.1]} />
         </RigidBody>
         <RigidBody 
           position={[2, 0, 0]} 
           ref={card} 
+          {...segmentProps}
           type={dragged ? 'kinematicPosition' : 'dynamic'}
         >
           <CuboidCollider args={[0.8, 1.125, 0.01]} />
@@ -196,6 +209,9 @@ function Badge({ username }: { username: string }) {
                 clearcoatRoughness={0.15}
                 roughness={0.3}
                 metalness={0.5}
+                iridescence={1}
+                iridescenceIOR={1}
+                iridescenceThicknessRange={[0, 2400]}
               />
             </mesh>
             <Text
