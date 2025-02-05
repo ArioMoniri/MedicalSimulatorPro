@@ -4,7 +4,7 @@ import { setupAuth } from "./auth";
 import { setupWebSocket } from "./websocket";
 import { db } from "@db";
 import { rooms, roomMessages, roomParticipants, scenarios, userProgress, vitalSigns } from "@db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { translateMedicalTerm, getATLSGuidelines } from "./services/openai";
 import { createThread, sendMessage } from "./services/assistant-service";
@@ -78,43 +78,13 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.post("/api/progress", async (req: Request, res: Response) => {
+  // Room Management API
+  app.post("/api/rooms", async (req: Request, res: Response) => {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const { scenarioId, score, threadId, feedback } = req.body;
-
-      // Validate required fields
-      if (!scenarioId || typeof score !== 'number' || !threadId) {
-        return res.status(400).json({
-          message: "Missing required fields: scenarioId, score, and threadId are required"
-        });
-      }
-
-      // Insert progress
-      const [progress] = await db.insert(userProgress)
-        .values({
-          userId: req.user.id,
-          scenarioId,
-          score,
-          threadId,
-          feedback: feedback || null,
-          completedAt: new Date(),
-        })
-        .returning();
-
-      res.json(progress);
-    } catch (error: any) {
-      console.error("Update progress error:", error);
-      res.status(500).json({ message: `Failed to update progress: ${error.message}` });
-    }
-  });
-
-  // Room Management API
-  app.post("/api/rooms", async (req: Request, res: Response) => {
-    try {
       const { scenarioId, maxParticipants = 4 } = req.body;
 
       if (!scenarioId) {
@@ -128,6 +98,7 @@ export function registerRoutes(app: Express): Server {
         .values({
           code,
           scenarioId,
+          creatorId: req.user.id,
           maxParticipants,
           createdAt: new Date(),
         })
@@ -142,6 +113,10 @@ export function registerRoutes(app: Express): Server {
 
   app.post("/api/rooms/join", async (req: Request, res: Response) => {
     try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const { code } = req.body;
 
       if (!code) {
@@ -162,19 +137,20 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Count active participants
-      const [{ count }] = await db
-        .select({
-          count: db.sql<number>`count(*)`
-        })
-        .from(roomParticipants)
-        .where(
-          and(
-            eq(roomParticipants.roomId, room.id),
-            eq(roomParticipants.leftAt, null as unknown as Date)
-          )
-        );
+      const activeParticipants = await db.select({
+        count: sql<number>`count(*)::integer`
+      })
+      .from(roomParticipants)
+      .where(
+        and(
+          eq(roomParticipants.roomId, room.id),
+          eq(roomParticipants.leftAt, null)
+        )
+      );
 
-      if (Number(count) >= (room.maxParticipants ?? 4)) {
+      const participantCount = activeParticipants[0].count;
+
+      if (participantCount >= (room.maxParticipants ?? 4)) {
         return res.status(400).json({ message: "Room is full" });
       }
 
@@ -182,6 +158,50 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Join room error:", error);
       res.status(500).json({ message: "Failed to join room" });
+    }
+  });
+
+  app.post("/api/rooms/:roomId/end", async (req: Request, res: Response) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { roomId } = req.params;
+
+      // Get room and verify creator
+      const [room] = await db.select()
+        .from(rooms)
+        .where(eq(rooms.id, parseInt(roomId)))
+        .limit(1);
+
+      if (!room) {
+        return res.status(404).json({ message: "Room not found" });
+      }
+
+      if (room.creatorId !== req.user.id) {
+        return res.status(403).json({ message: "Only room creator can end the room" });
+      }
+
+      // Update room end time
+      await db.update(rooms)
+        .set({ endedAt: new Date() })
+        .where(eq(rooms.id, parseInt(roomId)));
+
+      // Update all active participants as left
+      await db.update(roomParticipants)
+        .set({ leftAt: new Date() })
+        .where(
+          and(
+            eq(roomParticipants.roomId, parseInt(roomId)),
+            eq(roomParticipants.leftAt, null)
+          )
+        );
+
+      res.json({ message: "Room ended successfully" });
+    } catch (error) {
+      console.error("End room error:", error);
+      res.status(500).json({ message: "Failed to end room" });
     }
   });
 

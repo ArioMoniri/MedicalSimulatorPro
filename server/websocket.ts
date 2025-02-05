@@ -30,18 +30,23 @@ export function setupWebSocket(server: Server) {
         return cb(true);
       }
 
-      const userId = parseInt(info.req.headers['x-user-id'] as string);
-      if (!userId) {
+      try {
+        const cookies = info.req.headers.cookie;
+        if (!cookies) {
+          return cb(false, 401, 'Unauthorized - No cookies');
+        }
+
+        const user = await authenticateWebSocket(cookies);
+        if (!user) {
+          return cb(false, 401, 'Unauthorized - Invalid session');
+        }
+
+        (info.req as any).user = user;
+        return cb(true);
+      } catch (error) {
+        console.error("WebSocket authentication error:", error);
         return cb(false, 401, 'Unauthorized');
       }
-
-      const user = await authenticateWebSocket(userId);
-      if (!user) {
-        return cb(false, 401, 'Unauthorized');
-      }
-
-      (info.req as any).user = user;
-      cb(true);
     }
   });
 
@@ -81,6 +86,7 @@ export function setupWebSocket(server: Server) {
             }
             rooms.get(message.roomId)!.add(ws);
 
+            // Save participant to database
             await db.insert(roomParticipants).values({
               roomId: message.roomId,
               userId: ws.userId,
@@ -100,6 +106,7 @@ export function setupWebSocket(server: Server) {
               throw new Error("Missing required fields for chat");
             }
 
+            // Save message to database
             await db.insert(roomMessages).values({
               roomId: ws.roomId,
               userId: ws.userId,
@@ -156,13 +163,13 @@ export function setupWebSocket(server: Server) {
     }
 
     try {
+      // Update participant record in database
       await db.update(roomParticipants)
         .set({ leftAt: new Date() })
         .where(
           and(
             eq(roomParticipants.roomId, ws.roomId),
-            eq(roomParticipants.userId, ws.userId),
-            eq(roomParticipants.leftAt, null)
+            eq(roomParticipants.userId, ws.userId)
           )
         );
 

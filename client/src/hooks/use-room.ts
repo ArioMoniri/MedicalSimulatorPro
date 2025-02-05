@@ -79,7 +79,6 @@ export function useRoom() {
       const wsUrl = `${wsProtocol}//${window.location.host}/api/ws`;
       const ws = new WebSocket(wsUrl);
 
-      // Add user info to query parameters instead of headers
       ws.onopen = () => {
         console.log("WebSocket connection established");
         ws.send(JSON.stringify({

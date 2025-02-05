@@ -25,6 +25,8 @@ import ReactMarkdown from 'react-markdown';
 interface Room {
   id: number;
   code: string;
+  creatorId: number;
+  endedAt?: Date;
 }
 
 const parseVitalSigns = (content: string): VitalSigns | null => {
@@ -188,6 +190,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const [latestVitals, setLatestVitals] = useState<VitalSigns>({});
   const [scenarios, setScenarios] = useState<any[] | null>(null);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+  const [isCreator, setIsCreator] = useState(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -668,6 +671,37 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     }
   };
 
+  useEffect(() => {
+    if (currentRoom && user) {
+      setIsCreator(user.id === currentRoom.creatorId);
+    }
+  }, [currentRoom, user]);
+
+  const handleEndRoom = async () => {
+    try {
+      const response = await fetch(`/api/rooms/${currentRoom?.id}/end`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      handleLeaveRoom();
+      toast({
+        title: "Room Ended",
+        description: "Room has been ended for all participants",
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card className="h-[600px] flex flex-col">
@@ -706,13 +740,23 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                     <Users className="h-4 w-4" />
                     <span>Room Code: {currentRoom?.code}</span>
                   </div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleLeaveRoom}
-                  >
-                    Leave Room
-                  </Button>
+                  {isCreator ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleEndRoom}
+                    >
+                      End Room
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleLeaveRoom}
+                    >
+                      Leave Room
+                    </Button>
+                  )}
                 </div>
               )}
             </div>

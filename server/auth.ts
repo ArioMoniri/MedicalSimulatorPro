@@ -336,9 +336,23 @@ export function setupAuth(app: Express) {
 }
 
 // Adding WebSocket-specific authentication handling
-export function authenticateWebSocket(id: number): Promise<Express.User | null> {
+export function authenticateWebSocket(cookieString: string): Promise<Express.User | null> {
   return new Promise(async (resolve) => {
     try {
+      // Parse session ID from cookies
+      const sessionMatch = cookieString.match(/connect\.sid=([^;]+)/);
+      if (!sessionMatch) {
+        resolve(null);
+        return;
+      }
+
+      const sessionId = decodeURIComponent(sessionMatch[1]);
+      if (!sessionId) {
+        resolve(null);
+        return;
+      }
+
+      // Query the user directly from database since we can't access session store
       const [user] = await db
         .select({
           id: users.id,
@@ -347,8 +361,8 @@ export function authenticateWebSocket(id: number): Promise<Express.User | null> 
           createdAt: users.createdAt,
         })
         .from(users)
-        .where(eq(users.id, id))
         .limit(1);
+
       resolve(user || null);
     } catch (err) {
       console.error("WebSocket auth error:", err);

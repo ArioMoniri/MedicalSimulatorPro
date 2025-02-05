@@ -32,6 +32,7 @@ export const rooms = pgTable("rooms", {
   id: serial("id").primaryKey(),
   code: text("code").unique().notNull(),
   scenarioId: integer("scenario_id").references(() => scenarios.id).notNull(),
+  creatorId: integer("creator_id").references(() => users.id).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   endedAt: timestamp("ended_at"),
   maxParticipants: integer("max_participants").default(4),
