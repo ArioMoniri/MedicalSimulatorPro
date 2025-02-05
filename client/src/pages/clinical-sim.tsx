@@ -42,7 +42,7 @@ export default function ClinicalSim() {
           <CardContent>
             <div className="space-y-4">
               <div className="prose max-w-none dark:prose-invert">
-                <p>{activeScenario.description}</p>
+
               </div>
               <ChatInterface scenarioId={activeScenario.id} />
             </div>

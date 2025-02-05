@@ -6,6 +6,7 @@ import {
   CuboidCollider, 
   Physics, 
   RigidBody,
+  RigidBodyApi,
   useRopeJoint, 
   useSphericalJoint 
 } from '@react-three/rapier';
@@ -19,10 +20,17 @@ interface WelcomeBadgeProps {
   onClose: () => void;
 }
 
+interface DragState {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export default function WelcomeBadge({ username, onClose }: WelcomeBadgeProps) {
   const [show, setShow] = useState(true);
 
   useEffect(() => {
+    console.log("Welcome badge mounted");
     const timer = setTimeout(() => {
       setShow(false);
       onClose();
@@ -59,6 +67,7 @@ export default function WelcomeBadge({ username, onClose }: WelcomeBadgeProps) {
       }}
     >
       <Canvas camera={{ position: [0, 0, 13], fov: 25 }}>
+        <color attach="background" args={['transparent']} />
         <ambientLight intensity={Math.PI} />
         <Physics interpolate gravity={[0, -40, 0]} timeStep={1 / 60}>
           <Badge username={username} />
@@ -70,12 +79,12 @@ export default function WelcomeBadge({ username, onClose }: WelcomeBadgeProps) {
 }
 
 function Badge({ username }: { username: string }) {
-  const band = useRef<any>();
-  const fixed = useRef<any>();
-  const j1 = useRef<any>();
-  const j2 = useRef<any>();
-  const j3 = useRef<any>();
-  const card = useRef<any>();
+  const band = useRef<THREE.Mesh>(null);
+  const fixed = useRef<RigidBodyApi>(null);
+  const j1 = useRef<RigidBodyApi>(null);
+  const j2 = useRef<RigidBodyApi>(null);
+  const j3 = useRef<RigidBodyApi>(null);
+  const card = useRef<RigidBodyApi>(null);
 
   const vec = new THREE.Vector3();
   const ang = new THREE.Vector3();
@@ -90,7 +99,7 @@ function Badge({ username }: { username: string }) {
     new THREE.Vector3()
   ]));
 
-  const [dragged, drag] = useState(false);
+  const [dragged, drag] = useState<DragState | false>(false);
   const [hovered, hover] = useState(false);
 
   useEffect(() => {
@@ -106,26 +115,38 @@ function Badge({ username }: { username: string }) {
   useSphericalJoint(j3, card, [[0, 0, 0], [0, 1.45, 0]]);
 
   useFrame((state) => {
-    if (dragged) {
+    if (dragged && card.current) {
       vec.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
       dir.copy(vec).sub(state.camera.position).normalize();
       vec.add(dir.multiplyScalar(state.camera.position.length()));
-      card.current?.setNextKinematicTranslation({
+      card.current.setNextKinematicTranslation({
         x: vec.x - dragged.x,
         y: vec.y - dragged.y,
         z: vec.z - dragged.z
       });
     }
 
-    curve.points[0].copy(j3.current.translation());
-    curve.points[1].copy(j2.current.translation());
-    curve.points[2].copy(j1.current.translation());
-    curve.points[3].copy(fixed.current.translation());
-    band.current.geometry.setPoints(curve.getPoints(32));
+    if (
+      j3.current?.translation && 
+      j2.current?.translation && 
+      j1.current?.translation && 
+      fixed.current?.translation && 
+      band.current
+    ) {
+      curve.points[0].copy(j3.current.translation());
+      curve.points[1].copy(j2.current.translation());
+      curve.points[2].copy(j1.current.translation());
+      curve.points[3].copy(fixed.current.translation());
 
-    ang.copy(card.current.angvel());
-    rot.copy(card.current.rotation());
-    card.current.setAngvel({ x: ang.x, y: ang.y - rot.y * 0.25, z: ang.z });
+      // @ts-ignore - meshline types are not properly defined
+      band.current.geometry.setPoints(curve.getPoints(32));
+    }
+
+    if (card.current) {
+      ang.copy(card.current.angvel());
+      rot.copy(card.current.rotation());
+      card.current.setAngvel({ x: ang.x, y: ang.y - rot.y * 0.25, z: ang.z });
+    }
   });
 
   return (
@@ -158,7 +179,13 @@ function Badge({ username }: { username: string }) {
             }}
             onPointerDown={(e) => {
               e.stopPropagation();
-              drag(new THREE.Vector3().copy(e.point).sub(vec.copy(card.current.translation())));
+              const point = new THREE.Vector3().copy(e.point);
+              const translation = new THREE.Vector3().copy(card.current!.translation());
+              drag({
+                x: point.x - translation.x,
+                y: point.y - translation.y,
+                z: point.z - translation.z
+              });
             }}
           >
             <mesh>

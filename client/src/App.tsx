@@ -20,10 +20,12 @@ function Router() {
 
   // Show welcome badge when user logs in
   useEffect(() => {
-    if (user) {
+    console.log("User state changed:", user?.id);
+    if (user?.id) {
+      console.log("Showing welcome badge");
       setShowWelcome(true);
     }
-  }, [user]);
+  }, [user?.id]); // Watch user.id instead of user object
 
   if (isLoading) {
     return (
