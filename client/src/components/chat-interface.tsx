@@ -203,7 +203,15 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   // Update the message handler to save vital signs
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
-      setIsTyping(true);
+      // Show typing indicator before making request
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: "Medical Assistant is typing...",
+        createdAt: new Date(),
+        username: "System",
+        isTyping: true
+      }]);
+
       const response = await fetch("/api/assistant/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -220,11 +228,23 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       const content = data.content;
       console.log("Received message:", content);
 
-      // Parse vital signs
+      // Replace typing indicator with actual message
+      setMessages(prev => {
+        const filtered = prev.filter(msg => !msg.isTyping);
+        return [...filtered, {
+          role: "assistant",
+          content: content,
+          createdAt: new Date(),
+          username: "Medical Assistant",
+          isTyping: false
+        }];
+      });
+
+      // Parse vital signs from response
       const vitals = parseVitalSigns(content);
       if (vitals) {
         console.log("Found new vitals:", vitals);
-        setLatestVitals(vitals); // Replace entirely instead of merging
+        setLatestVitals(vitals);
 
         if (threadId) {
           saveVitalSignsMutation.mutate({
@@ -237,27 +257,17 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       // Parse score if present
       const score = parseScore(content);
       if (score !== null && scenarioId) {
-        // Update progress in database
         updateProgress.mutate({
           scenarioId,
           score,
           threadId: threadId!,
-          feedback: content // Include the feedback text
+          feedback: content
         });
       }
-
-      // Add message to chat
-      setMessages(prev => [
-        ...prev,
-        {
-          role: "assistant",
-          content: content,
-        }
-      ]);
-      setIsTyping(false);
     },
     onError: (error: Error) => {
-      setIsTyping(false);
+      // Remove typing indicator on error
+      setMessages(prev => prev.filter(msg => !msg.isTyping));
       toast({
         variant: "destructive",
         title: "Error",
@@ -375,16 +385,37 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         return dateA - dateB;
       });
 
-      const newMessages: Message[] = sortedMessages.map((msg) => ({
-        id: msg.id,
-        role: msg.isAssistant ? "assistant" : "user",
-        content: msg.content,
-        createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-        username: msg.username || "Unknown User",
-        isTyping: false
-      }));
+      const newMessages: Message[] = sortedMessages.map((msg) => {
+        // Parse vital signs from assistant messages
+        if (msg.isAssistant) {
+          const vitals = parseVitalSigns(msg.content);
+          if (vitals) {
+            setLatestVitals(vitals);
+          }
+        }
 
-      setMessages(newMessages);
+        return {
+          id: msg.id,
+          role: msg.isAssistant ? "assistant" : "user",
+          content: msg.content,
+          createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+          username: msg.isAssistant ?
+            (msg.content.includes("is typing") ? "System" : "Medical Assistant") :
+            msg.username || "Unknown User",
+          isTyping: msg.content.includes("is typing")
+        };
+      });
+
+      // Filter out old typing indicators when new messages arrive
+      const filteredMessages = newMessages.filter((msg, index) => {
+        if (msg.isTyping) {
+          const nextMsg = newMessages[index + 1];
+          return !nextMsg || nextMsg.isTyping;
+        }
+        return true;
+      });
+
+      setMessages(filteredMessages);
     }
   }, [roomMessagesData]);
 
@@ -817,24 +848,31 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           <div className="space-y-4">
             {messages.map((message, i) => (
               <div
-                key={i}
+                key={message.id || i}
                 className={`flex ${
                   message.role === "user" && message.username === user?.username
                     ? "justify-end"
                     : "justify-start"
                 }`}
               >
-                {message.role === "assistant" && (
+                {(message.role === "assistant" || message.username !== user?.username) && (
                   <Avatar className="h-8 w-8 mr-2">
-                    <AvatarImage src="/assistant-profile.jpeg" alt="Assistant" />
-                    <AvatarFallback>AI</AvatarFallback>
+                    <AvatarImage
+                      src={message.role === "assistant" ? "/assistant-profile.jpeg" : "/user-profile.jpeg"}
+                      alt={message.role === "assistant" ? "Assistant" : "User"}
+                    />
+                    <AvatarFallback>
+                      {message.role === "assistant" ? "AI" : message.username?.charAt(0).toUpperCase()}
+                    </AvatarFallback>
                   </Avatar>
                 )}
                 <div
                   className={`rounded-lg px-4 py-2 max-w-[80%] ${
                     message.role === "user" && message.username === user?.username
                       ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                      : message.role === "assistant"
+                        ? "bg-muted"
+                        : "bg-secondary"
                   }`}
                 >
                   {message.username && (
@@ -843,27 +881,30 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                     </div>
                   )}
                   <div className="whitespace-pre-wrap break-words">
-                    <ReactMarkdown
-                      components={{
-                        p: ({ children }) => <p className="mb-2">{children}</p>,
-                        ul: ({ children }) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
-                        ol: ({ children }) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
-                        li: ({ children }) => <li className="mb-1">{children}</li>,
-                        strong: ({ children }) => <strong className="font-bold">{children}</strong>,
-                        em: ({ children }) => <em className="italic">{children}</em>,
-                        h1: ({ children }) => <h1 className="text-xl font-bold mb-2">{children}</h1>,
-                        h2: ({ children }) => <h2 className="text-lg font-bold mb-2">{children}</h2>,
-                        h3: ({ children }) => <h3 className="text-base font-bold mb-2">{children}</h3>,
-                        code: ({ children }) => <code className="bg-muted-foreground/10 rounded px-1">{children}</code>,
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
+                    {message.isTyping ? (
+                      <TypingIndicator />
+                    ) : (
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="mb-2">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
+                          li: ({ children }) => <li className="mb-1">{children}</li>,
+                          strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                          em: ({ children }) => <em className="italic">{children}</em>,
+                          h1: ({ children }) => <h1 className="text-xl font-bold mb-2">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-lg font-bold mb-2">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-base font-bold mb-2">{children}</h3>,
+                          code: ({ children }) => <code className="bg-muted-foreground/10 rounded px-1">{children}</code>,
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    )}
                   </div>
                 </div>
               </div>
             ))}
-            {isTyping && <TypingIndicator />}
           </div>
         </ScrollArea>
 
@@ -910,7 +951,6 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       {/* Vital Signs Monitor */}
       <VitalSignsMonitor latestVitals={latestVitals} />
 
-      {/* Chat History Section */}
       {chatHistory.length > 0 && (
         <Card>
           <CardContent className="p-4">

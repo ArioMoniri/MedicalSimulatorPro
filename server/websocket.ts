@@ -21,11 +21,13 @@ interface ConnectedClient extends WebSocket {
   userId?: number;
   username?: string;
   isAuthenticated?: boolean;
-  threadId?: string;
 }
 
+// Store room threads globally
+const roomThreads = new Map<number, string>();
+
 export function setupWebSocket(server: Server) {
-  const wss = new WebSocketServer({ 
+  const wss = new WebSocketServer({
     server,
     path: "/api/ws",
     verifyClient: async (info, cb) => {
@@ -73,17 +75,17 @@ export function setupWebSocket(server: Server) {
 
     const handleMessageError = (error: any, ws: ConnectedClient) => {
       console.error("WebSocket error:", error);
-      ws.send(JSON.stringify({ 
-        type: "error", 
+      ws.send(JSON.stringify({
+        type: "error",
         message: error instanceof Error ? error.message : "Failed to process message"
       }));
     };
 
     ws.on("message", async (data) => {
       if (!ws.isAuthenticated) {
-        ws.send(JSON.stringify({ 
-          type: "error", 
-          message: "Unauthorized" 
+        ws.send(JSON.stringify({
+          type: "error",
+          message: "Unauthorized"
         }));
         return;
       }
@@ -101,7 +103,8 @@ export function setupWebSocket(server: Server) {
             // Check if room exists and is not ended
             const [room] = await db.select()
               .from(dbRooms)
-              .where(eq(dbRooms.id, message.roomId));
+              .where(eq(dbRooms.id, message.roomId))
+              .limit(1);
 
             if (!room || room.endedAt) {
               ws.send(JSON.stringify({
@@ -116,29 +119,35 @@ export function setupWebSocket(server: Server) {
             // Add client to room
             if (!connectedRooms.has(message.roomId)) {
               connectedRooms.set(message.roomId, new Set());
+
+              // Create thread for room if it doesn't exist
+              if (!roomThreads.has(message.roomId)) {
+                try {
+                  const thread = await createThread();
+                  roomThreads.set(message.roomId, thread.id);
+                } catch (error) {
+                  console.error("Failed to create thread for room:", error);
+                }
+              }
             }
             connectedRooms.get(message.roomId)!.add(ws);
 
-            // Store thread ID if provided
-            if (message.threadId) {
-              ws.threadId = message.threadId;
-            }
-
             // Send join message
-            await db.insert(roomMessages)
+            const [joinMessage] = await db.insert(roomMessages)
               .values({
                 roomId: message.roomId,
-                userId: 0, // System message
+                userId: ws.userId,
                 content: `${ws.username} joined the room`,
                 createdAt: new Date(),
                 isAssistant: true,
-              });
+              })
+              .returning();
 
             broadcastToRoom(message.roomId, {
               type: "chat",
               content: `${ws.username} joined the room`,
-              userId: 0,
-              username: "System",
+              userId: ws.userId,
+              username: ws.username,
               isAssistant: true
             });
             break;
@@ -151,7 +160,8 @@ export function setupWebSocket(server: Server) {
             // Check if room still exists and is not ended
             const [activeRoom] = await db.select()
               .from(dbRooms)
-              .where(eq(dbRooms.id, ws.roomId));
+              .where(eq(dbRooms.id, ws.roomId))
+              .limit(1);
 
             if (!activeRoom || activeRoom.endedAt) {
               ws.send(JSON.stringify({
@@ -162,15 +172,17 @@ export function setupWebSocket(server: Server) {
             }
 
             // Send user message
-            await db.insert(roomMessages)
+            const [newMessage] = await db.insert(roomMessages)
               .values({
                 roomId: ws.roomId,
                 userId: ws.userId,
                 content: message.content,
                 createdAt: new Date(),
                 isAssistant: false,
-              });
+              })
+              .returning();
 
+            // Broadcast user message to room
             broadcastToRoom(ws.roomId, {
               type: "chat",
               content: message.content,
@@ -179,23 +191,41 @@ export function setupWebSocket(server: Server) {
               isAssistant: false
             });
 
-            // Process AI response if thread exists
-            if (ws.threadId) {
+            // Get room thread ID
+            const roomThreadId = roomThreads.get(ws.roomId);
+            if (roomThreadId) {
               try {
+                // Send typing indicator
+                broadcastToRoom(ws.roomId, {
+                  type: "chat",
+                  content: "Medical Assistant is typing...",
+                  userId: 0,
+                  username: "System",
+                  isAssistant: true
+                });
+
                 const assistantResponse = await sendMessage(
-                  message.content, 
-                  ws.threadId,
+                  `${ws.username}: ${message.content}`,
+                  roomThreadId,
                   "emergency"
                 );
 
-                await db.insert(roomMessages)
+                // Parse vital signs from response
+                const vitals = parseVitalSigns(assistantResponse.content);
+                if (vitals) {
+                  console.log("Parsed vital signs in group chat:", vitals);
+                }
+
+                // Store and broadcast AI response
+                const [aiMessage] = await db.insert(roomMessages)
                   .values({
                     roomId: ws.roomId,
                     userId: 0,
                     content: assistantResponse.content,
                     createdAt: new Date(),
                     isAssistant: true,
-                  });
+                  })
+                  .returning();
 
                 broadcastToRoom(ws.roomId, {
                   type: "chat",
@@ -242,34 +272,39 @@ export function setupWebSocket(server: Server) {
 
     try {
       // Check if room has ended
-      const [room] = await db.select()
+      const [room] = await db
+        .select()
         .from(dbRooms)
-        .where(eq(dbRooms.id, ws.roomId));
+        .where(eq(dbRooms.id, ws.roomId))
+        .limit(1);
 
       const roomClients = connectedRooms.get(ws.roomId);
       if (roomClients) {
         roomClients.delete(ws);
         if (roomClients.size === 0) {
           connectedRooms.delete(ws.roomId);
+          // Clean up room thread when everyone leaves
+          roomThreads.delete(ws.roomId);
         }
       }
 
       // Only send leave message if room hasn't ended
       if (!room?.endedAt) {
-        await db.insert(roomMessages)
+        const [leaveMessage] = await db.insert(roomMessages)
           .values({
             roomId: ws.roomId,
-            userId: 0,
+            userId: ws.userId,
             content: `${ws.username} left the room`,
             createdAt: new Date(),
             isAssistant: true,
-          });
+          })
+          .returning();
 
         broadcastToRoom(ws.roomId, {
           type: "chat",
           content: `${ws.username} left the room`,
-          userId: 0,
-          username: "System",
+          userId: ws.userId,
+          username: ws.username,
           isAssistant: true
         });
 
@@ -287,4 +322,90 @@ export function setupWebSocket(server: Server) {
       console.error("Error handling client leave:", error);
     }
   }
+}
+
+// Implement vital signs parsing function
+function parseVitalSigns(text: string): object | null {
+  console.log("Attempting to parse vital signs from:", text);
+
+  const findValue = (text: string, patterns: string[]): string | null => {
+    for (const pattern of patterns) {
+      const regex = new RegExp(pattern, 'i');
+      const match = text.match(regex);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    return null;
+  };
+
+  const lines = text.split(/[\n,]/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  const vitals: any = {};
+
+  lines.forEach(line => {
+    // Heart Rate patterns
+    const hrPatterns = [
+      'HR:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?',
+      'Heart Rate:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?',
+      'Pulse:?\\s*(\\d+)(?:\\s*(?:bpm|beats per minute|beats/min|/min))?'
+    ];
+    const hrValue = findValue(line, hrPatterns);
+    if (hrValue) {
+      vitals.hr = parseInt(hrValue);
+    }
+
+    // Blood Pressure patterns
+    const bpPatterns = [
+      'BP:?\\s*(\\d+)\\s*/\\s*(\\d+)(?:\\s*(?:mmHg|mm Hg))?',
+      'Blood Pressure:?\\s*(\\d+)\\s*/\\s*(\\d+)(?:\\s*(?:mmHg|mm Hg))?'
+    ];
+    for (const pattern of bpPatterns) {
+      const match = line.match(new RegExp(pattern, 'i'));
+      if (match && match[1] && match[2]) {
+        vitals.bp = {
+          systolic: parseInt(match[1]),
+          diastolic: parseInt(match[2])
+        };
+        break;
+      }
+    }
+
+    // SpO2 patterns
+    const spo2Patterns = [
+      'SpO2:?\\s*(\\d+)\\s*%?',
+      'O2 Sat:?\\s*(\\d+)\\s*%?',
+      'Oxygen Saturation:?\\s*(\\d+)\\s*%?',
+      'SaO2:?\\s*(\\d+)\\s*%?'
+    ];
+    const spo2Value = findValue(line, spo2Patterns);
+    if (spo2Value) {
+      vitals.spo2 = parseInt(spo2Value);
+    }
+
+    // Temperature patterns
+    const tempPatterns = [
+      'Temp:?\\s*(\\d+\\.?\\d*)\\s*[°]?C',
+      'Temperature:?\\s*(\\d+\\.?\\d*)\\s*[°]?C'
+    ];
+    const tempValue = findValue(line, tempPatterns);
+    if (tempValue) {
+      vitals.temp = parseFloat(tempValue);
+    }
+
+    // Respiratory Rate patterns
+    const rrPatterns = [
+      'RR:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?',
+      'Respiratory Rate:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?',
+      'Resp:?\\s*(\\d+)(?:\\s*(?:breaths/min|/min|bpm))?'
+    ];
+    const rrValue = findValue(line, rrPatterns);
+    if (rrValue) {
+      vitals.rr = parseInt(rrValue);
+    }
+  });
+
+  return Object.keys(vitals).length > 0 ? vitals : null;
 }
