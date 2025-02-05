@@ -751,7 +751,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       console.log("Found HR:", vitals.hr);
     }
 
-    const bpMatch = cleanContent.match(patterns.bp);
+    const bpMatch = cleanContent.match(patterns.BP);
     if (bpMatch) {
       vitals.bp = {
         systolic: parseInt(bpMatch[1]),
@@ -787,7 +787,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           if (hrMatch) vitals.hr = parseInt(hrMatch[1]);
         }
         if (!vitals.bp) {
-          const bpMatch = part.match(patterns.bp);
+          const bpMatch = part.match(patterns.BP);
           if (bpMatch) vitals.bp = { systolic: parseInt(bpMatch[1]), diastolic: parseInt(bpMatch[2]) };
         }
         if (!vitals.rr) {
@@ -848,7 +848,17 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       <Card className="h-[600px] flex flex-col">
         <CardHeader>
           <CardTitle className="flex justify-between items-center">
-            <span>Chat Interface</span>
+            <div className="flex items-center gap-2">
+              <span>Chat Interface</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNewChat}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                New Chat
+              </Button>
+            </div>
             <div className="flex gap-2">
               {!roomId ? (
                 <>
