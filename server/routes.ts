@@ -46,6 +46,10 @@ export function registerRoutes(app: Express): Server {
       // Generate a unique 6-character room code
       const code = nanoid(6).toUpperCase();
 
+      // Create OpenAI thread first
+      const thread = await createThread();
+      const threadId = thread.id;
+
       const [room] = await db.insert(rooms)
         .values({
           code,
@@ -60,13 +64,16 @@ export function registerRoutes(app: Express): Server {
       await db.insert(roomMessages)
         .values({
           roomId: room.id,
-          userId: ASSISTANT_USER_ID,
+          userId: 0,
           content: "Welcome to the simulation room! You can start your discussion.",
           createdAt: new Date(),
           isAssistant: true
         });
 
-      res.json(room);
+      // Store threadId in a new table or modify the existing one
+      // For now we'll use room.id as thread_{room.id}
+
+      res.json({ ...room, threadId });
     } catch (error) {
       console.error("Create room error:", error);
       res.status(500).json({ message: "Failed to create room" });
@@ -153,9 +160,9 @@ export function registerRoutes(app: Express): Server {
         isAssistant: roomMessages.isAssistant,
         username: sql<string>`CASE WHEN ${roomMessages.userId} = 0 THEN 'Medical Assistant' ELSE (SELECT username FROM users WHERE id = ${roomMessages.userId}) END`
       })
-      .from(roomMessages)
-      .where(eq(roomMessages.roomId, parseInt(roomId)))
-      .orderBy(desc(roomMessages.createdAt));
+        .from(roomMessages)
+        .where(eq(roomMessages.roomId, parseInt(roomId)))
+        .orderBy(desc(roomMessages.createdAt));
 
       res.json(messages);
     } catch (error) {
@@ -172,31 +179,33 @@ export function registerRoutes(app: Express): Server {
       }
 
       const { roomId } = req.params;
+      const parsedRoomId = parseInt(roomId);
 
       // Get room and verify creator
       const [room] = await db.select()
         .from(rooms)
-        .where(eq(rooms.id, parseInt(roomId)));
+        .where(eq(rooms.id, parsedRoomId));
 
       if (!room) {
         return res.status(404).json({ message: "Room not found" });
       }
 
-      if (room.creatorId !== req.user.id) {
+      // Convert IDs to numbers for comparison
+      if (Number(room.creatorId) !== Number(req.user.id)) {
         return res.status(403).json({ message: "Only room creator can end the room" });
       }
 
       // Update room end time
       await db.update(rooms)
         .set({ endedAt: new Date() })
-        .where(eq(rooms.id, parseInt(roomId)));
+        .where(eq(rooms.id, parsedRoomId));
 
       // Update all active participants as left
       await db.update(roomParticipants)
         .set({ leftAt: new Date() })
         .where(
           and(
-            eq(roomParticipants.roomId, parseInt(roomId)),
+            eq(roomParticipants.roomId, parsedRoomId),
             sql`${roomParticipants.leftAt} IS NULL`
           )
         );

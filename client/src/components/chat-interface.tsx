@@ -367,14 +367,20 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
 
   useEffect(() => {
     if (roomMessagesData) {
+      // Sort messages by createdAt in ascending order (oldest first)
+      const sortedMessages = [...roomMessagesData].sort((a, b) => {
+        const dateA = new Date(a.createdAt).getTime();
+        const dateB = new Date(b.createdAt).getTime();
+        return dateA - dateB;
+      });
+
       setMessages(
-        roomMessagesData.map((msg) => ({
+        sortedMessages.map((msg) => ({
           id: msg.id,
-          role: msg.userId === 0 ? "assistant" : "user",
+          role: msg.isAssistant ? "assistant" : "user",
           content: msg.content,
           createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-          username: msg.userId === 0 ? "Medical Assistant" :
-                    user?.id === msg.userId ? user.username : msg.username,
+          username: msg.isAssistant ? "Medical Assistant" : msg.username
         }))
       );
     }

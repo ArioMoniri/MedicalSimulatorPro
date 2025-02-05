@@ -27,7 +27,6 @@ export function setupWebSocket(server: Server) {
     server,
     path: "/api/ws",
     verifyClient: async (info, cb) => {
-      // Skip verification for Vite HMR
       if (info.req.headers['sec-websocket-protocol'] === 'vite-hmr') {
         return cb(true);
       }
@@ -88,7 +87,6 @@ export function setupWebSocket(server: Server) {
             }
             rooms.get(message.roomId)!.add(ws);
 
-            // Save participant to database
             await db.insert(roomParticipants).values({
               roomId: message.roomId,
               userId: ws.userId,
@@ -108,39 +106,49 @@ export function setupWebSocket(server: Server) {
               throw new Error("Missing required fields for chat");
             }
 
-            // Save message to database
             await db.insert(roomMessages).values({
               roomId: ws.roomId,
               userId: ws.userId,
               content: message.content,
+              isAssistant: false,
             });
 
-            // Broadcast user message
             broadcastToRoom(ws.roomId, {
               type: "chat",
               content: message.content,
               userId: ws.userId,
               username: ws.username,
+              isAssistant: false,
             });
 
-            // Get AI response
-            const assistantResponse = await sendMessage(message.content, "thread_" + ws.roomId.toString());
+            try {
+              const assistantResponse = await sendMessage(
+                message.content, 
+                `thread_${ws.roomId}`,
+                "emergency" 
+              );
 
-            // Save AI response to database
-            await db.insert(roomMessages).values({
-              roomId: ws.roomId,
-              userId: 0, // Special ID for assistant
-              content: assistantResponse.content,
-            });
+              await db.insert(roomMessages).values({
+                roomId: ws.roomId,
+                userId: 0,
+                content: assistantResponse.content,
+                isAssistant: true,
+              });
 
-            // Broadcast AI response
-            broadcastToRoom(ws.roomId, {
-              type: "chat",
-              content: assistantResponse.content,
-              userId: 0,
-              username: "Medical Assistant",
-              isAssistant: true,
-            });
+              broadcastToRoom(ws.roomId, {
+                type: "chat",
+                content: assistantResponse.content,
+                userId: 0,
+                username: "Medical Assistant",
+                isAssistant: true,
+              });
+            } catch (error) {
+              console.error("Failed to get AI response:", error);
+              ws.send(JSON.stringify({
+                type: "error",
+                message: "Failed to get AI response"
+              }));
+            }
             break;
 
           case "leave":
@@ -185,7 +193,6 @@ export function setupWebSocket(server: Server) {
     }
 
     try {
-      // Update participant record in database
       await db.update(roomParticipants)
         .set({ leftAt: new Date() })
         .where(
