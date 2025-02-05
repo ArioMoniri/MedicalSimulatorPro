@@ -738,7 +738,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       rr: /\(?\s*(?:rr|respiratory rate|resp)\s*\)?\s*:?\s*(\d+)(?:\s*(?:breaths\/min|\/min|bpm))?/i,
 
       // Matches e.g. "SpO2: 91%" or "(oxygen saturation): 91"
-      spo2: /\(?\s*(?:spo2|o2 sat|oxygen saturation|sao2)\s*\)?\s*:?\s*(\d+)\s*%?/i,
+      spo2: /\(?\s*(?:spo.*?|spo2|o2 sat|oxygen saturation|sao2)\s*\)?\s*:?\s*(\d+)\s*%?/i,
 
       // Matches e.g. "Temp: 36.5°C" or "(temperature): 36.5"
       temp: /\(?\s*(?:temp|temperature)\s*\)?\s*:?\s*([\d.]+)(?:\s*[°]?\s*[CF])?/i
