@@ -11,7 +11,6 @@ import EmergencySim from "@/pages/emergency-sim";
 import ClinicalSim from "@/pages/clinical-sim";
 import NavigationBar from "@/components/navigation-bar";
 import { Loader2 } from "lucide-react";
-import { WelcomeBadgeProvider } from "@/context/WelcomeBadgeContext";
 
 function Router() {
   const { user, isLoading } = useUser();
@@ -53,10 +52,8 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <WelcomeBadgeProvider>
-        <Router />
-        <Toaster />
-      </WelcomeBadgeProvider>
+      <Router />
+      <Toaster />
     </QueryClientProvider>
   );
 }
