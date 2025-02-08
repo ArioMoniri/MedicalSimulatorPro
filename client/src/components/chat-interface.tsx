@@ -20,7 +20,7 @@ import { useUser } from "@/hooks/use-user";
 import { Send, Upload, Users, Plus } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown from "react-markdown";
 
 interface Message {
   id?: number;
@@ -92,16 +92,22 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   // Load chat history
   useEffect(() => {
     const loadHistory = () => {
-      const history = localStorage.getItem(`chat_history_list_${user?.id}_${scenarioId}`);
+      const history = localStorage.getItem(
+        `chat_history_list_${user?.id}_${scenarioId}`,
+      );
       if (history) {
         setChatHistory(JSON.parse(history));
       }
 
       // Load current chat if exists
-      const currentId = localStorage.getItem(`current_chat_${user?.id}_${scenarioId}`);
+      const currentId = localStorage.getItem(
+        `current_chat_${user?.id}_${scenarioId}`,
+      );
       if (currentId) {
         setCurrentChatId(currentId);
-        const savedChat = localStorage.getItem(`chat_${user?.id}_${scenarioId}_${currentId}`);
+        const savedChat = localStorage.getItem(
+          `chat_${user?.id}_${scenarioId}_${currentId}`,
+        );
         if (savedChat) {
           const chatData = JSON.parse(savedChat);
           setMessages(chatData.messages);
@@ -125,21 +131,23 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       };
       localStorage.setItem(
         `chat_${user?.id}_${scenarioId}_${currentChatId}`,
-        JSON.stringify(chatData)
+        JSON.stringify(chatData),
       );
 
       // Update history list, preventing duplicates
       const firstMessage = messages[0].content;
       const lastMessage = messages[messages.length - 1].content;
-      let updatedHistory = chatHistory.filter(chat => chat.id !== currentChatId);
+      let updatedHistory = chatHistory.filter(
+        (chat) => chat.id !== currentChatId,
+      );
 
       const newChat: ChatHistory = {
         id: currentChatId,
-        threadId: threadId || '',
+        threadId: threadId || "",
         messages,
         createdAt: new Date(),
         firstMessage: firstMessage.substring(0, 100) + "...",
-        lastMessage: lastMessage.substring(0, 100) + "..."
+        lastMessage: lastMessage.substring(0, 100) + "...",
       };
 
       updatedHistory = [newChat, ...updatedHistory];
@@ -147,17 +155,16 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       setChatHistory(updatedHistory);
       localStorage.setItem(
         `chat_history_list_${user?.id}_${scenarioId}`,
-        JSON.stringify(updatedHistory)
+        JSON.stringify(updatedHistory),
       );
 
       // Save current chat id
       localStorage.setItem(
         `current_chat_${user?.id}_${scenarioId}`,
-        currentChatId
+        currentChatId,
       );
     }
   }, [messages, currentChatId, user?.id, scenarioId, threadId, chatHistory]);
-
 
   // Create thread mutation
   const createThreadMutation = useMutation({
@@ -205,14 +212,17 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       // Show typing indicator before making request
-      setMessages(prev => [...prev, {
-        role: "assistant",
-        content: "Medical Assistant is typing...",
-        createdAt: new Date(),
-        username: "System",
-        isTyping: true,
-        isAssistant: true
-      }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Medical Assistant is typing...",
+          createdAt: new Date(),
+          username: "System",
+          isTyping: true,
+          isAssistant: true,
+        },
+      ]);
 
       const response = await fetch("/api/assistant/message", {
         method: "POST",
@@ -220,7 +230,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         body: JSON.stringify({
           content,
           threadId,
-          simulationType: scenarios?.find(s => s.id === scenarioId)?.type || "emergency"
+          simulationType:
+            scenarios?.find((s) => s.id === scenarioId)?.type || "emergency",
         }),
       });
       if (!response.ok) throw new Error("Failed to send message");
@@ -231,23 +242,28 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       console.log("Received message:", content);
 
       // Replace typing indicator with actual message
-      setMessages(prev => {
-        const filtered = prev.filter(msg => !msg.isTyping);
-        return [...filtered, {
-          role: "assistant",
-          content: content,
-          createdAt: new Date(),
-          username: "Medical Assistant",
-          isTyping: false,
-          isAssistant: true
-        }];
+      setMessages((prev) => {
+        const filtered = prev.filter((msg) => !msg.isTyping);
+        return [
+          ...filtered,
+          {
+            role: "assistant",
+            content: content,
+            createdAt: new Date(),
+            username: "Medical Assistant",
+            isTyping: false,
+            isAssistant: true,
+          },
+        ];
       });
 
-      // Parse vital signs from response
       const vitals = parseVitalSigns(content);
       if (vitals) {
         console.log("Found new vitals:", vitals);
-        setLatestVitals(vitals);
+        setLatestVitals((currentVitals) => ({
+          ...currentVitals,
+          ...vitals
+        }));
 
         if (threadId) {
           saveVitalSignsMutation.mutate({
@@ -256,21 +272,9 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           });
         }
       }
-
-      // Parse score if present
-      const score = parseScore(content);
-      if (score !== null && scenarioId) {
-        updateProgress.mutate({
-          scenarioId,
-          score,
-          threadId: threadId!,
-          feedback: content
-        });
-      }
     },
     onError: (error: Error) => {
-      // Remove typing indicator on error
-      setMessages(prev => prev.filter(msg => !msg.isTyping));
+      setMessages((prev) => prev.filter((msg) => !msg.isTyping));
       toast({
         variant: "destructive",
         title: "Error",
@@ -281,7 +285,12 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
 
   // Add mutation for updating progress
   const updateProgress = useMutation({
-    mutationFn: async (data: { scenarioId: number; score: number; threadId: string, feedback: string }) => {
+    mutationFn: async (data: {
+      scenarioId: number;
+      score: number;
+      threadId: string;
+      feedback: string;
+    }) => {
       const response = await fetch("/api/progress", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -328,29 +337,32 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     // Add to history
     const newChat: ChatHistory = {
       id: newChatId,
-      threadId: '',
+      threadId: "",
       messages: [],
       createdAt: new Date(),
       firstMessage: "New conversation",
-      lastMessage: "New conversation"
+      lastMessage: "New conversation",
     };
 
-    setChatHistory(prev => [newChat, ...prev]);
+    setChatHistory((prev) => [newChat, ...prev]);
   };
 
   // Update handleLoadChat to load vital signs history
   const handleLoadChat = (chatId: string) => {
     setCurrentChatId(chatId);
     setLatestVitals({}); // Reset vitals before loading chat
-    const savedChat = localStorage.getItem(`chat_${user?.id}_${scenarioId}_${chatId}`);
+    const savedChat = localStorage.getItem(
+      `chat_${user?.id}_${scenarioId}_${chatId}`,
+    );
     if (savedChat) {
       const chatData = JSON.parse(savedChat);
       setMessages(chatData.messages);
       setThreadId(chatData.threadId);
 
       // Parse vital signs from the loaded messages
-      const lastMessageWithVitals = [...chatData.messages].reverse()
-        .find(msg => {
+      const lastMessageWithVitals = [...chatData.messages]
+        .reverse()
+        .find((msg) => {
           const vitals = parseVitalSigns(msg.content);
           return vitals !== null;
         });
@@ -387,21 +399,36 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         return dateA - dateB;
       });
 
-      // Process all messages for vital signs
-      sortedMessages.forEach(msg => {
-        if (msg.isAssistant) {
-          const vitals = parseVitalSigns(msg.content);
-          if (vitals) {
-            setLatestVitals(vitals);
+      let currentVitals: VitalSigns = { ...latestVitals };
+
+      sortedMessages.forEach((msg) => {
+        if (msg.isAssistant && !msg.content.includes("is typing")) {
+          const newVitals = parseVitalSigns(msg.content);
+          if (newVitals) {
+            currentVitals = {
+              ...currentVitals,
+              ...newVitals
+            };
           }
         }
       });
 
+      if (Object.keys(currentVitals).length > 0) {
+        setLatestVitals(currentVitals);
+      }
+
+      // Update latest vitals if there are changes
+      if (Object.keys(currentVitals).length > 0) {
+        setLatestVitals(currentVitals);
+      }
+
       const newMessages: Message[] = sortedMessages.map((msg) => {
         // For system messages (join/leave/typing)
-        if (msg.content.includes("joined the room") ||
-            msg.content.includes("left the room") ||
-            msg.content.includes("is typing")) {
+        if (
+          msg.content.includes("joined the room") ||
+          msg.content.includes("left the room") ||
+          msg.content.includes("is typing")
+        ) {
           return {
             id: msg.id,
             role: "assistant",
@@ -409,18 +436,12 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
             createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
             username: "System",
             isTyping: msg.content.includes("is typing"),
-            isAssistant: true
+            isAssistant: true,
           };
         }
 
         // For AI assistant messages
         if (msg.isAssistant) {
-          // Parse vital signs from AI responses
-          const vitals = parseVitalSigns(msg.content);
-          if (vitals) {
-            setLatestVitals(vitals);
-          }
-
           return {
             id: msg.id,
             role: "assistant",
@@ -432,13 +453,12 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           };
         }
 
-        // For user messages
         return {
           id: msg.id,
           role: "user",
           content: msg.content,
           createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-          username: msg.username || user?.username,
+          username: msg.userId || user?.username,
           isTyping: false,
           isAssistant: false
         };
@@ -467,7 +487,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           id: room.id,
           code: room.code,
           creatorId: room.creatorId,
-          endedAt: room.endedAt ? new Date(room.endedAt) : undefined
+          endedAt: room.endedAt ? new Date(room.endedAt) : undefined,
         });
 
         // Create new thread for AI interactions
@@ -507,7 +527,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           id: room.id,
           code: room.code,
           creatorId: room.creatorId,
-          endedAt: room.endedAt ? new Date(room.endedAt) : undefined
+          endedAt: room.endedAt ? new Date(room.endedAt) : undefined,
         });
 
         // Create new thread for AI interactions
@@ -558,24 +578,24 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       }
 
       const response = await fetch(`/api/rooms/${currentRoom.id}/end`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json",
         },
-        credentials: 'include',
+        credentials: "include",
         body: JSON.stringify({
           userId: user.id,
-          creatorId: currentRoom.creatorId
-        })
+          creatorId: currentRoom.creatorId,
+        }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Room end error:', {
+        console.error("Room end error:", {
           status: response.status,
           error: errorText,
           userId: user.id,
-          creatorId: currentRoom.creatorId
+          creatorId: currentRoom.creatorId,
         });
         throw new Error(errorText);
       }
@@ -608,10 +628,10 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       content: input,
       username: user?.username,
       createdAt: new Date(),
-      isAssistant: false
+      isAssistant: false,
     };
 
-    setMessages(prev => [...prev, newMessage]);
+    setMessages((prev) => [...prev, newMessage]);
     setInput("");
 
     if (roomId && isConnected) {
@@ -637,7 +657,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       content: transcript,
       username: user?.username,
       createdAt: new Date(),
-      isAssistant: false
+      isAssistant: false,
     };
 
     setMessages([...messages, newMessage]);
@@ -659,25 +679,28 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Image size should be less than 5MB"
+        description: "Image size should be less than 5MB",
       });
       return;
     }
 
     // Create FormData
     const formData = new FormData();
-    formData.append('image', file);
-    formData.append('threadId', threadId || '');
-    formData.append('simulationType', scenarios?.find(s => s.id === scenarioId)?.type || 'emergency');
+    formData.append("image", file);
+    formData.append("threadId", threadId || "");
+    formData.append(
+      "simulationType",
+      scenarios?.find((s) => s.id === scenarioId)?.type || "emergency",
+    );
 
     try {
-      const response = await fetch('/api/assistant/upload-image', {
-        method: 'POST',
-        body: formData
+      const response = await fetch("/api/assistant/upload-image", {
+        method: "POST",
+        body: formData,
       });
 
       if (!response.ok) {
-        throw new Error('Failed to upload image');
+        throw new Error("Failed to upload image");
       }
 
       const data = await response.json();
@@ -688,21 +711,22 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
         content: `[Image uploaded: ${file.name}]`,
         username: user?.username,
         createdAt: new Date(),
-        isAssistant: false
+        isAssistant: false,
       };
 
       setMessages([...messages, newMessage]);
 
       // Process assistant response
       if (threadId) {
-        sendMessageMutation.mutate(`I've uploaded an image named ${file.name}. Please analyze it.`);
+        sendMessageMutation.mutate(
+          `I've uploaded an image named ${file.name}. Please analyze it.`,
+        );
       }
-
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message
+        description: error.message,
       });
     }
   };
@@ -713,97 +737,69 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     }
   }, [currentRoom, user]);
 
-
   const parseVitalSigns = (content: string): VitalSigns | null => {
     console.log("Attempting to parse vital signs from:", content);
 
-    // Clean up markdown bullet points and other special characters
     const cleanContent = content
-      .replace(/[•*-]\s+/g, '')  // Remove bullet points and their spaces
-      .replace(/\([^)]*\)/g, '') // Remove parenthetical statements
-      .replace(/\s+/g, ' ')      // Normalize whitespace
+      .replace(/\(on[^)]*\)/g, "") // Remove parenthetical statements about oxygen
+      .replace(/\s+/g, " ") // Normalize whitespace
       .trim();
 
     const vitals: VitalSigns = {};
 
-    // Define regex patterns with more flexible matching
     const patterns = {
-      // Matches e.g. "HR: 140 bpm" or "(hr): 140"
-      hr: /\(?\s*(?:hr|heart rate)\s*\)?\s*:?\s*(\d+)(?:\s*bpm)?/i,
-
-      // Matches e.g. "BP: 90/60 mmHg" or "(Blood Pressure): 90/60"
-      BP: /\(?\s*(?:bp|blood pressure)\s*\)?\s*:?\s*(\d+)\s*\/\s*(\d+)(?:\s*(?:mmhg|mm hg))?/i,
-
-      // Matches e.g. "RR: 28" or "(Respiratory Rate): 28"
-      rr: /\(?\s*(?:rr|respiratory rate|resp)\s*\)?\s*:?\s*(\d+)(?:\s*(?:breaths\/min|\/min|bpm))?/i,
-
-      // Matches e.g. "SpO2: 91%" or "(oxygen saturation): 91"
-      spo2: /\(?\s*(?:spo.*?|spo2|o2 sat|oxygen saturation|sao2)\s*\)?\s*:?\s*(\d+)\s*%?/i,
-
-      // Matches e.g. "Temp: 36.5°C" or "(temperature): 36.5"
-      temp: /\(?\s*(?:temp|temperature)\s*\)?\s*:?\s*([\d.]+)(?:\s*[°]?\s*[CF])?/i
+      hr: /(?:Heart Rate.?|HR|hr)\s:\s(\d+)/i,
+      bp: /(?:Blood Pressure.?|BP|bp)\s:\s(\d+)\s\/\s(\d+)/i,
+      rr: /(?:Respiratory Rate.?|RR|rr)\s:\s(\d+)/i,
+      spo2: /(?:Oxygen Saturation.?|spo.?|SpO2|SpOz|O2 Sat|SaO2)\s:\s(\d+)/i,
+      temp: /(?:Temperature.?|Temp)\s:\s([\d.]+)/i,
     };
 
-    // Extract vital signs
-    const hrMatch = cleanContent.match(patterns.hr);
-    if (hrMatch) {
-      vitals.hr = parseInt(hrMatch[1]);
-      console.log("Found HR:", vitals.hr);
-    }
+    const parseSection = (text: string) => {
+      // Debug logging for each section being parsed
+      console.log("Parsing section:", text);
 
-    const bpMatch = cleanContent.match(patterns.BP);
-    if (bpMatch) {
-      vitals.bp = {
-        systolic: parseInt(bpMatch[1]),
-        diastolic: parseInt(bpMatch[2])
-      };
-      console.log("Found BP:", vitals.bp);
-    }
+      const hrMatch = text.match(patterns.hr);
+      if (hrMatch?.[1]) {
+        vitals.hr = parseInt(hrMatch[1]);
+        console.log("Found HR:", vitals.hr);
+      }
 
-    const rrMatch = cleanContent.match(patterns.rr);
-    if (rrMatch) {
-      vitals.rr = parseInt(rrMatch[1]);
-      console.log("Found RR:", vitals.rr);
-    }
+      const bpMatch = text.match(patterns.bp);
+      if (bpMatch?.[1] && bpMatch?.[2]) {
+        vitals.bp = {
+          systolic: parseInt(bpMatch[1]),
+          diastolic: parseInt(bpMatch[2]),
+        };
+        console.log("Found BP:", vitals.bp);
+      }
 
-    const spo2Match = cleanContent.match(patterns.spo2);
-    if (spo2Match) {
-      vitals.spo2 = parseInt(spo2Match[1]);
-      console.log("Found SpO2:", vitals.spo2);
-    }
+      const rrMatch = text.match(patterns.rr);
+      if (rrMatch?.[1]) {
+        vitals.rr = parseInt(rrMatch[1]);
+        console.log("Found RR:", vitals.rr);
+      }
 
-    const tempMatch = cleanContent.match(patterns.temp);
-    if (tempMatch) {
-      vitals.temp = parseFloat(tempMatch[1]);
-      console.log("Found Temp:", vitals.temp);
-    }
+      const spo2Match = text.match(patterns.spo2);
+      if (spo2Match?.[1]) {
+        vitals.spo2 = parseInt(spo2Match[1]);
+        console.log("Found SpO2:", vitals.spo2);
+      }
 
-    // If no vitals found, try splitting by common delimiters and process each part
-    if (Object.keys(vitals).length === 0) {
-      const parts = cleanContent.split(/[,•]/).map(part => part.trim());
-      parts.forEach(part => {
-        if (!vitals.hr) {
-          const hrMatch = part.match(patterns.hr);
-          if (hrMatch) vitals.hr = parseInt(hrMatch[1]);
-        }
-        if (!vitals.bp) {
-          const bpMatch = part.match(patterns.BP);
-          if (bpMatch) vitals.bp = { systolic: parseInt(bpMatch[1]), diastolic: parseInt(bpMatch[2]) };
-        }
-        if (!vitals.rr) {
-          const rrMatch = part.match(patterns.rr);
-          if (rrMatch) vitals.rr = parseInt(rrMatch[1]);
-        }
-        if (!vitals.spo2) {
-          const spo2Match = part.match(patterns.spo2);
-          if (spo2Match) vitals.spo2 = parseInt(spo2Match[1]);
-        }
-        if (!vitals.temp) {
-          const tempMatch = part.match(patterns.temp);
-          if (tempMatch) vitals.temp = parseFloat(tempMatch[1]);
-        }
-      });
-    }
+      const tempMatch = text.match(patterns.temp);
+      if (tempMatch?.[1]) {
+        vitals.temp = parseFloat(tempMatch[1]);
+        console.log("Found Temp:", vitals.temp);
+      }
+    };
+
+    // Split the content by bullet points and process each section
+    const sections = cleanContent.split("•").map((section) => section.trim());
+    sections.forEach((section) => {
+      if (section) {
+        parseSection(section);
+      }
+    });
 
     console.log("Final parsed vitals:", vitals);
     return Object.keys(vitals).length > 0 ? vitals : null;
@@ -813,7 +809,9 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
     console.log("Attempting to parse score from:", content);
 
     // Look for score patterns like "Final Score: X/Y" or "Score: X out of Y"
-    const scoreMatch = content.match(/(?:Final\s+)?Score:\s*(\d+)(?:\s*\/\s*|\s+out\s+of\s+)(\d+)/i);
+    const scoreMatch = content.match(
+      /(?:Final\s+)?Score:\s*(\d+)(?:\s*\/\s*|\s+out\s+of\s+)(\d+)/i,
+    );
 
     if (scoreMatch) {
       const [_, score, total] = scoreMatch;
@@ -844,28 +842,30 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
   }
 
   return (
-    <div className="space-y-6">
-      <Card className="h-[600px] flex flex-col">
-        <CardHeader>
-          <CardTitle className="flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <span>Chat Interface</span>
+    <div className="space-y-4 max-w-full p-2 md:p-6">
+      <Card className="min-h-[400px] h-[calc(100vh-200px)] flex flex-col">
+        <CardHeader className="p-3 md:p-6">
+          <CardTitle className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              <span className="text-lg">Chat Interface</span>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleNewChat}
+                className="text-xs md:text-sm"
               >
-                <Plus className="h-4 w-4 mr-1" />
+                <Plus className="h-3 w-3 md:h-4 md:w-4 mr-1" />
                 New Chat
               </Button>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 w-full md:w-auto">
               {!roomId ? (
                 <>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleCreateRoom}
+                    className="text-xs md:text-sm flex-1 md:flex-none"
                   >
                     Create Room
                   </Button>
@@ -873,21 +873,23 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                     variant="outline"
                     size="sm"
                     onClick={() => setShowJoinDialog(true)}
+                    className="text-xs md:text-sm flex-1 md:flex-none"
                   >
                     Join Room
                   </Button>
                 </>
               ) : (
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Users className="h-4 w-4" />
-                    <span>Room Code: {currentRoom?.code}</span>
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  <div className="flex items-center gap-2 text-xs md:text-sm text-muted-foreground flex-1 md:flex-none">
+                    <Users className="h-3 w-3 md:h-4 md:w-4" />
+                    <span className="truncate">Room: {currentRoom?.code}</span>
                   </div>
                   {isCreator ? (
                     <Button
                       variant="destructive"
                       size="sm"
                       onClick={handleEndRoom}
+                      className="text-xs md:text-sm whitespace-nowrap"
                     >
                       End Room
                     </Button>
@@ -896,6 +898,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                       variant="destructive"
                       size="sm"
                       onClick={handleLeaveRoom}
+                      className="text-xs md:text-sm whitespace-nowrap"
                     >
                       Leave Room
                     </Button>
@@ -906,7 +909,7 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           </CardTitle>
         </CardHeader>
 
-        <ScrollArea className="flex-1 p-4">
+        <ScrollArea className="flex-1 p-3 md:p-4">
           <div className="space-y-4">
             {messages.map((message, i) => (
               <div
@@ -917,20 +920,28 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                     : "justify-start"
                 }`}
               >
-                {(message.role === "assistant" || message.username !== user?.username) && (
-                  <Avatar className="h-8 w-8 mr-2">
+                {(message.role === "assistant" ||
+                  message.username !== user?.username) && (
+                  <Avatar className="h-6 w-6 md:h-8 md:w-8 mr-2">
                     <AvatarImage
-                      src={message.role === "assistant" ? "/assistant-profile.jpeg" : "/user-profile.jpeg"}
+                      src={
+                        message.role === "assistant"
+                          ? "/assistant-profile.jpeg"
+                          : "/user-profile.jpeg"
+                      }
                       alt={message.role === "assistant" ? "Assistant" : "User"}
                     />
                     <AvatarFallback>
-                      {message.role === "assistant" ? "AI" : message.username?.charAt(0).toUpperCase()}
+                      {message.role === "assistant"
+                        ? "AI"
+                        : message.username?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 )}
                 <div
-                  className={`rounded-lg px-4 py-2 max-w-[80%] ${
-                    message.role === "user" && message.username === user?.username
+                  className={`rounded-lg px-3 py-2 md:px-4 md:py-2 max-w-[85%] md:max-w-[75%] text-sm md:text-base ${
+                    message.role === "user" &&
+                    message.username === user?.username
                       ? "bg-primary text-primary-foreground"
                       : message.role === "assistant"
                         ? "bg-muted"
@@ -948,16 +959,48 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                     ) : (
                       <ReactMarkdown
                         components={{
-                          p: ({ children }) => <p className="mb-2">{children}</p>,
-                          ul: ({ children }) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
-                          li: ({ children }) => <li className="mb-1">{children}</li>,
-                          strong: ({ children }) => <strong className="font-bold">{children}</strong>,
-                          em: ({ children }) => <em className="italic">{children}</em>,
-                          h1: ({ children }) => <h1 className="text-xl font-bold mb-2">{children}</h1>,
-                          h2: ({ children }) => <h2 className="text-lg font-bold mb-2">{children}</h2>,
-                          h3: ({ children }) => <h3 className="text-base font-bold mb-2">{children}</h3>,
-                          code: ({ children }) => <code className="bg-muted-foreground/10 rounded px-1">{children}</code>,
+                          p: ({ children }) => (
+                            <p className="mb-2 text-sm md:text-base">{children}</p>
+                          ),
+                          ul: ({ children }) => (
+                            <ul className="list-disc pl-4 mb-2 text-sm md:text-base">
+                              {children}
+                            </ul>
+                          ),
+                          ol: ({ children }) => (
+                            <ol className="list-decimal pl-4 mb-2 text-sm md:text-base">
+                              {children}
+                            </ol>
+                          ),
+                          li: ({ children }) => (
+                            <li className="mb-1">{children}</li>
+                          ),
+                          strong: ({ children }) => (
+                            <strong className="font-bold">{children}</strong>
+                          ),
+                          em: ({ children }) => (
+                            <em className="italic">{children}</em>
+                          ),
+                          h1: ({ children }) => (
+                            <h1 className="text-lg md:text-xl font-bold mb-2">
+                              {children}
+                            </h1>
+                          ),
+                          h2: ({ children }) => (
+                            <h2 className="text-base md:text-lg font-bold mb-2">
+                              {children}
+                            </h2>
+                          ),
+                          h3: ({ children }) => (
+                            <h3 className="text-sm md:text-base font-bold mb-2">
+                              {children}
+                            </h3>
+                          ),
+                          code: ({ children }) => (
+                            <code className="bg-muted-foreground/10 rounded px-1 text-sm">
+                              {children}
+                            </code>
+                          ),
                         }}
                       >
                         {message.content}
@@ -965,8 +1008,8 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
                     )}
                   </div>
                   {message.createdAt && (
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {new Date(message.createdAt).toLocaleTimeString()}
+                    <div className="text-[10px] md:text-xs text-muted-foreground mt-1">
+                      {new Date(message.createdAt).toLocaleString()}
                     </div>
                   )}
                 </div>
@@ -975,67 +1018,74 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
           </div>
         </ScrollArea>
 
-        <CardContent className="border-t p-4">
-          <div className="flex gap-2">
+        <CardContent className="border-t p-3 md:p-4">
+          <div className="flex flex-wrap md:flex-nowrap gap-2">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type your message..."
               onKeyPress={(e) => e.key === "Enter" && handleSend()}
+              className="min-h-[40px] text-sm md:text-base flex-1"
             />
-            <Button
-              onClick={handleSend}
-              disabled={!input.trim() || isTyping}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-            <div className="relative">
-              <input
-                id="image-upload"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageUpload}
-              />
+            <div className="flex gap-2 w-full md:w-auto">
               <Button
-                variant="outline"
-                size="icon"
-                onClick={() => {
-                  const input = document.getElementById('image-upload');
-                  if (input) {
-                    input.click();
-                  }
-                }}
+                onClick={handleSend}
+                disabled={!input.trim() || isTyping}
+                className="flex-1 md:flex-none"
               >
-                <Upload className="h-4 w-4" />
+                <Send className="h-4 w-4" />
               </Button>
+              <div className="relative">
+                <input
+                  id="image-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    const input = document.getElementById('image-upload');
+                    if (input) {
+                      input.click();
+                    }
+                  }}
+                  className="min-w-[40px]"
+                >
+                  <Upload className="h-4 w-4" />
+                </Button>
+              </div>
+              <VoiceInput onTranscript={handleVoiceInput} />
             </div>
-            <VoiceInput onTranscript={handleVoiceInput} />
           </div>
         </CardContent>
       </Card>
 
       {/* Vital Signs Monitor */}
-      <VitalSignsMonitor latestVitals={latestVitals} />
+      <div className="w-full overflow-x-auto">
+        <VitalSignsMonitor latestVitals={latestVitals} />
+      </div>
 
       {chatHistory.length > 0 && (
         <Card>
-          <CardContent className="p-4">
-            <h4 className="font-semibold mb-4">Chat History</h4>
-            <ScrollArea className="h-[200px]">
+          <CardContent className="p-3 md:p-4">
+            <h4 className="font-semibold mb-4 text-sm md:text-base">Chat History</h4>
+            <ScrollArea className="h-[150px] md:h-[200px]">
               <div className="space-y-2">
                 {chatHistory.map((chat) => (
                   <Button
                     key={chat.id}
                     variant="ghost"
-                    className="w-full justify-start"
+                    className="w-full justify-start text-left"
                     onClick={() => handleLoadChat(chat.id)}
                   >
                     <div className="flex flex-col items-start">
-                      <span className="text-sm font-medium">
+                      <span className="text-xs md:text-sm font-medium truncate w-full">
                         {chat.firstMessage}
                       </span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-[10px] md:text-xs text-muted-foreground">
                         {new Date(chat.createdAt).toLocaleString()}
                       </span>
                     </div>
@@ -1048,21 +1098,22 @@ export default function ChatInterface({ scenarioId }: ChatInterfaceProps) {
       )}
 
       <Dialog open={showJoinDialog} onOpenChange={setShowJoinDialog}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[90%] md:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Join Room</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-base md:text-lg">Join Room</DialogTitle>
+            <DialogDescription className="text-sm">
               Enter the room code shared with you to join a collaborative session.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="code">Room Code</Label>
+              <Label htmlFor="code" className="text-sm">Room Code</Label>
               <Input
                 id="code"
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                 placeholder="Enter room code"
+                className="text-base"
               />
             </div>
             <Button
