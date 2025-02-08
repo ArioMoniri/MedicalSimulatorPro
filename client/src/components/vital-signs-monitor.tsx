@@ -14,6 +14,7 @@ import {
 import { Line } from 'react-chartjs-2';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { motion, AnimatePresence } from 'framer-motion';
+import { useMobile } from "@/hooks/use-mobile";
 
 ChartJS.register(
   CategoryScale,
@@ -64,7 +65,7 @@ const HeartBeatPulse = ({ heartRate, status }: { heartRate?: number, status: str
   const color = status === 'critical' ? 'bg-red-600' : status === 'warning' ? 'bg-yellow-500' : 'bg-emerald-500';
 
   return (
-    <div className="relative h-10 w-10 flex items-center justify-center">
+    <div className="relative h-8 w-8 md:h-10 md:w-10 flex items-center justify-center">
       <motion.div
         className={`absolute inset-0 rounded-full ${color}`}
         animate={{
@@ -77,7 +78,7 @@ const HeartBeatPulse = ({ heartRate, status }: { heartRate?: number, status: str
           ease: "easeInOut",
         }}
       />
-      <span className="relative text-xs font-bold text-white">HR</span>
+      <span className="relative text-[10px] md:text-xs font-bold text-white">HR</span>
     </div>
   );
 };
@@ -87,7 +88,7 @@ const SpO2Indicator = ({ value, status }: { value?: number, status: string }) =>
 
   return (
     <motion.div
-      className={`h-10 w-10 rounded-full ${color} flex items-center justify-center`}
+      className={`h-8 w-8 md:h-10 md:w-10 rounded-full ${color} flex items-center justify-center`}
       animate={{
         scale: [1, 1.1, 1],
         opacity: [0.8, 1, 0.8],
@@ -98,7 +99,7 @@ const SpO2Indicator = ({ value, status }: { value?: number, status: string }) =>
         ease: "easeInOut",
       }}
     >
-      <span className="text-xs font-bold text-white">O₂</span>
+      <span className="text-[10px] md:text-xs font-bold text-white">O₂</span>
     </motion.div>
   );
 };
@@ -118,19 +119,19 @@ const VitalSignBox = ({
   const borderColor = status === 'critical' ? 'border-red-600' : status === 'warning' ? 'border-yellow-500' : 'border-emerald-500';
 
   return (
-    <div className={`p-4 rounded-lg border ${borderColor} ${bgColor}`}>
+    <div className={`p-2 md:p-4 rounded-lg border ${borderColor} ${bgColor}`}>
       <div className="space-y-1">
-        <span className="text-sm font-medium text-gray-400">{label}</span>
+        <span className="text-xs md:text-sm font-medium text-gray-400">{label}</span>
         <AnimatePresence mode="wait">
           <motion.div
             key={value}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="font-mono text-2xl tracking-wider font-bold"
+            className="font-mono text-xl md:text-2xl tracking-wider font-bold"
           >
             {value}
-            <span className="text-sm font-normal text-gray-400 ml-1">{unit}</span>
+            <span className="text-xs md:text-sm font-normal text-gray-400 ml-1">{unit}</span>
           </motion.div>
         </AnimatePresence>
       </div>
@@ -157,6 +158,8 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
     labels: [],
   });
 
+  const isMobile = useMobile();
+
   const hrStatus = getVitalStatus('hr', latestVitals.hr);
   const systolicStatus = getVitalStatus('systolic', latestVitals.bp?.systolic);
   const diastolicStatus = getVitalStatus('diastolic', latestVitals.bp?.diastolic);
@@ -170,13 +173,13 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
 
       setVitalsHistory(prev => {
         const newHistory = {
-          hr: [...prev.hr, latestVitals.hr ?? prev.hr[prev.hr.length - 1] ?? 0].slice(-20),
-          systolic: [...prev.systolic, latestVitals.bp?.systolic ?? prev.systolic[prev.systolic.length - 1] ?? 0].slice(-20),
-          diastolic: [...prev.diastolic, latestVitals.bp?.diastolic ?? prev.diastolic[prev.diastolic.length - 1] ?? 0].slice(-20),
-          rr: [...prev.rr, latestVitals.rr ?? prev.rr[prev.rr.length - 1] ?? 0].slice(-20),
-          spo2: [...prev.spo2, latestVitals.spo2 ?? prev.spo2[prev.spo2.length - 1] ?? 0].slice(-20),
-          temp: [...prev.temp, latestVitals.temp ?? prev.temp[prev.temp.length - 1] ?? 0].slice(-20),
-          labels: [...prev.labels, currentTime].slice(-20),
+          hr: [...prev.hr, latestVitals.hr ?? prev.hr[prev.hr.length - 1] ?? 0].slice(-10),
+          systolic: [...prev.systolic, latestVitals.bp?.systolic ?? prev.systolic[prev.systolic.length - 1] ?? 0].slice(-10),
+          diastolic: [...prev.diastolic, latestVitals.bp?.diastolic ?? prev.diastolic[prev.diastolic.length - 1] ?? 0].slice(-10),
+          rr: [...prev.rr, latestVitals.rr ?? prev.rr[prev.rr.length - 1] ?? 0].slice(-10),
+          spo2: [...prev.spo2, latestVitals.spo2 ?? prev.spo2[prev.spo2.length - 1] ?? 0].slice(-10),
+          temp: [...prev.temp, latestVitals.temp ?? prev.temp[prev.temp.length - 1] ?? 0].slice(-10),
+          labels: [...prev.labels, currentTime].slice(-10),
         };
 
         const hasChanges = Object.entries(newHistory).some(([key, value]) => {
@@ -203,7 +206,7 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         ticks: {
           color: 'rgba(255, 255, 255, 0.8)',
           font: {
-            size: 11,
+            size: isMobile ? 8 : 11,
           },
         }
       },
@@ -213,38 +216,38 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         },
         ticks: {
           color: 'rgba(255, 255, 255, 0.8)',
-          maxRotation: 45,
-          minRotation: 45,
+          maxRotation: isMobile ? 0 : 45,
+          minRotation: isMobile ? 0 : 45,
           font: {
-            size: 10,
+            size: isMobile ? 8 : 10,
           },
           callback: function(val, index) {
-            // Show fewer x-axis labels
-            return index % 2 === 0 ? this.getLabelForValue(val as number) : '';
+            return index % (isMobile ? 3 : 2) === 0 ? this.getLabelForValue(val as number) : '';
           }
         }
       }
     },
     plugins: {
       legend: {
+        position: isMobile ? 'bottom' : 'top',
         labels: {
           color: 'rgba(255, 255, 255, 0.8)',
           font: {
-            size: 11,
+            size: isMobile ? 8 : 11,
           },
-          boxWidth: 15,
+          boxWidth: isMobile ? 8 : 15,
+          padding: isMobile ? 8 : 10,
         },
-        position: 'top',
       },
       tooltip: {
         mode: 'index',
         intersect: false,
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
         titleFont: {
-          size: 12,
+          size: isMobile ? 10 : 12,
         },
         bodyFont: {
-          size: 11,
+          size: isMobile ? 9 : 11,
         },
       },
     },
@@ -259,7 +262,7 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         borderColor: 'rgb(255, 99, 132)',
         backgroundColor: 'rgba(255, 99, 132, 0.5)',
         tension: 0.2,
-        borderWidth: 2,
+        borderWidth: isMobile ? 1 : 2,
       },
       {
         label: 'BP Systolic',
@@ -267,7 +270,7 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         borderColor: 'rgb(53, 162, 235)',
         backgroundColor: 'rgba(53, 162, 235, 0.5)',
         tension: 0.2,
-        borderWidth: 2,
+        borderWidth: isMobile ? 1 : 2,
       },
       {
         label: 'BP Diastolic',
@@ -275,7 +278,7 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         borderColor: 'rgb(75, 192, 192)',
         backgroundColor: 'rgba(75, 192, 192, 0.5)',
         tension: 0.2,
-        borderWidth: 2,
+        borderWidth: isMobile ? 1 : 2,
       },
     ],
   };
@@ -289,7 +292,7 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         borderColor: 'rgb(255, 159, 64)',
         backgroundColor: 'rgba(255, 159, 64, 0.5)',
         tension: 0.2,
-        borderWidth: 2,
+        borderWidth: isMobile ? 1 : 2,
       },
       {
         label: 'SpO₂',
@@ -297,7 +300,7 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         borderColor: 'rgb(153, 102, 255)',
         backgroundColor: 'rgba(153, 102, 255, 0.5)',
         tension: 0.2,
-        borderWidth: 2,
+        borderWidth: isMobile ? 1 : 2,
       },
       {
         label: 'Temp',
@@ -305,22 +308,22 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         borderColor: 'rgb(255, 205, 86)',
         backgroundColor: 'rgba(255, 205, 86, 0.5)',
         tension: 0.2,
-        borderWidth: 2,
+        borderWidth: isMobile ? 1 : 2,
       },
     ],
   };
 
   return (
     <Card className="bg-gray-900 text-white shadow-xl">
-      <CardHeader className="border-b border-gray-800">
-        <CardTitle className="text-xl font-bold flex items-center gap-2">
+      <CardHeader className="border-b border-gray-800 p-4">
+        <CardTitle className="text-base md:text-xl font-bold flex items-center gap-2">
           <span className="text-emerald-500">●</span>
           Patient Vital Signs Monitor
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-6 space-y-6">
+      <CardContent className="p-3 md:p-6 space-y-4 md:space-y-6">
         {/* Main Vital Signs Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
           <VitalSignBox
             label="Heart Rate"
             value={latestVitals.hr?.toString() || '--'}
@@ -354,16 +357,16 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         </div>
 
         {/* Charts Section */}
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-2 gap-4 md:gap-6">
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-gray-400">Cardiovascular Trends</h3>
-            <div className="h-[250px] bg-black/50 rounded-lg border border-gray-800 p-4">
+            <h3 className="text-xs md:text-sm font-medium text-gray-400">Cardiovascular Trends</h3>
+            <div className="h-[200px] md:h-[250px] bg-black/50 rounded-lg border border-gray-800 p-2 md:p-4">
               <Line options={chartOptions} data={primaryData} />
             </div>
           </div>
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-gray-400">Respiratory & Temperature Trends</h3>
-            <div className="h-[250px] bg-black/50 rounded-lg border border-gray-800 p-4">
+            <h3 className="text-xs md:text-sm font-medium text-gray-400">Respiratory & Temperature Trends</h3>
+            <div className="h-[200px] md:h-[250px] bg-black/50 rounded-lg border border-gray-800 p-2 md:p-4">
               <Line options={chartOptions} data={secondaryData} />
             </div>
           </div>
