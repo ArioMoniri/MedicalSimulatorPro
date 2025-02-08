@@ -27,18 +27,17 @@ ChartJS.register(
 );
 
 export interface VitalSigns {
-  hr?: number;  // Heart rate
-  bp?: { systolic: number; diastolic: number };  // Blood pressure
-  rr?: number;  // Respiratory rate
-  spo2?: number;  // SpO2
-  temp?: number;  // Temperature
+  hr?: number;
+  bp?: { systolic: number; diastolic: number };
+  rr?: number;
+  spo2?: number;
+  temp?: number;
 }
 
 interface VitalSignsMonitorProps {
   latestVitals: VitalSigns;
 }
 
-// Helper function to determine vital sign status
 const getVitalStatus = (type: string, value?: number): 'normal' | 'warning' | 'critical' => {
   if (!value) return 'normal';
 
@@ -104,16 +103,16 @@ const SpO2Indicator = ({ value, status }: { value?: number, status: string }) =>
   );
 };
 
-const VitalSignBox = ({ 
-  label, 
-  value, 
-  unit, 
-  status 
-}: { 
-  label: string; 
-  value: string; 
-  unit: string; 
-  status: 'normal' | 'warning' | 'critical' 
+const VitalSignBox = ({
+  label,
+  value,
+  unit,
+  status
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  status: 'normal' | 'warning' | 'critical'
 }) => {
   const bgColor = status === 'critical' ? 'bg-red-950/50' : status === 'warning' ? 'bg-yellow-950/50' : 'bg-emerald-950/50';
   const borderColor = status === 'critical' ? 'border-red-600' : status === 'warning' ? 'border-yellow-500' : 'border-emerald-500';
@@ -159,6 +158,7 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
   });
 
   const isMobile = useMobile();
+  const maxDataPoints = isMobile ? 6 : 10;
 
   const hrStatus = getVitalStatus('hr', latestVitals.hr);
   const systolicStatus = getVitalStatus('systolic', latestVitals.bp?.systolic);
@@ -169,17 +169,17 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
 
   useEffect(() => {
     if (latestVitals && Object.keys(latestVitals).length > 0) {
-      const currentTime = new Date().toLocaleTimeString();
+      const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
       setVitalsHistory(prev => {
         const newHistory = {
-          hr: [...prev.hr, latestVitals.hr ?? prev.hr[prev.hr.length - 1] ?? 0].slice(-10),
-          systolic: [...prev.systolic, latestVitals.bp?.systolic ?? prev.systolic[prev.systolic.length - 1] ?? 0].slice(-10),
-          diastolic: [...prev.diastolic, latestVitals.bp?.diastolic ?? prev.diastolic[prev.diastolic.length - 1] ?? 0].slice(-10),
-          rr: [...prev.rr, latestVitals.rr ?? prev.rr[prev.rr.length - 1] ?? 0].slice(-10),
-          spo2: [...prev.spo2, latestVitals.spo2 ?? prev.spo2[prev.spo2.length - 1] ?? 0].slice(-10),
-          temp: [...prev.temp, latestVitals.temp ?? prev.temp[prev.temp.length - 1] ?? 0].slice(-10),
-          labels: [...prev.labels, currentTime].slice(-10),
+          hr: [...prev.hr, latestVitals.hr ?? prev.hr[prev.hr.length - 1] ?? 0].slice(-maxDataPoints),
+          systolic: [...prev.systolic, latestVitals.bp?.systolic ?? prev.systolic[prev.systolic.length - 1] ?? 0].slice(-maxDataPoints),
+          diastolic: [...prev.diastolic, latestVitals.bp?.diastolic ?? prev.diastolic[prev.diastolic.length - 1] ?? 0].slice(-maxDataPoints),
+          rr: [...prev.rr, latestVitals.rr ?? prev.rr[prev.rr.length - 1] ?? 0].slice(-maxDataPoints),
+          spo2: [...prev.spo2, latestVitals.spo2 ?? prev.spo2[prev.spo2.length - 1] ?? 0].slice(-maxDataPoints),
+          temp: [...prev.temp, latestVitals.temp ?? prev.temp[prev.temp.length - 1] ?? 0].slice(-maxDataPoints),
+          labels: [...prev.labels, currentTime].slice(-maxDataPoints),
         };
 
         const hasChanges = Object.entries(newHistory).some(([key, value]) => {
@@ -190,7 +190,7 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         return hasChanges ? newHistory : prev;
       });
     }
-  }, [latestVitals]);
+  }, [latestVitals, maxDataPoints]);
 
   const chartOptions: ChartOptions<'line'> = {
     responsive: true,
@@ -202,53 +202,68 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
       y: {
         grid: {
           color: 'rgba(255, 255, 255, 0.1)',
+          drawBorder: false,
         },
         ticks: {
           color: 'rgba(255, 255, 255, 0.8)',
+          padding: isMobile ? 4 : 5,
           font: {
-            size: isMobile ? 8 : 11,
+            size: isMobile ? 10 : 11,
           },
-        }
+        },
+        border: {
+          display: false,
+        },
       },
       x: {
         grid: {
           color: 'rgba(255, 255, 255, 0.1)',
+          drawBorder: false,
+          display: false,
         },
         ticks: {
           color: 'rgba(255, 255, 255, 0.8)',
-          maxRotation: isMobile ? 0 : 45,
-          minRotation: isMobile ? 0 : 45,
+          maxRotation: 0,
+          minRotation: 0,
+          padding: isMobile ? 4 : 5,
           font: {
-            size: isMobile ? 8 : 10,
+            size: isMobile ? 10 : 10,
           },
-          callback: function(val, index) {
-            return index % (isMobile ? 3 : 2) === 0 ? this.getLabelForValue(val as number) : '';
-          }
-        }
+          autoSkip: true,
+          maxTicksLimit: isMobile ? 3 : 6,
+        },
+        border: {
+          display: false,
+        },
       }
     },
     plugins: {
       legend: {
-        position: isMobile ? 'bottom' : 'top',
+        position: 'top',
+        align: 'start',
         labels: {
           color: 'rgba(255, 255, 255, 0.8)',
+          usePointStyle: true,
+          pointStyle: 'circle',
+          padding: isMobile ? 15 : 20,
           font: {
-            size: isMobile ? 8 : 11,
+            size: isMobile ? 11 : 11,
           },
-          boxWidth: isMobile ? 8 : 15,
-          padding: isMobile ? 8 : 10,
+          boxWidth: isMobile ? 8 : 8,
         },
       },
       tooltip: {
         mode: 'index',
         intersect: false,
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        padding: isMobile ? 8 : 8,
         titleFont: {
-          size: isMobile ? 10 : 12,
+          size: isMobile ? 12 : 12,
         },
         bodyFont: {
-          size: isMobile ? 9 : 11,
+          size: isMobile ? 11 : 11,
         },
+        displayColors: false,
       },
     },
   };
@@ -262,7 +277,8 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         borderColor: 'rgb(255, 99, 132)',
         backgroundColor: 'rgba(255, 99, 132, 0.5)',
         tension: 0.2,
-        borderWidth: isMobile ? 1 : 2,
+        borderWidth: isMobile ? 1.5 : 2,
+        pointRadius: isMobile ? 2 : 3,
       },
       {
         label: 'BP Systolic',
@@ -270,7 +286,8 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         borderColor: 'rgb(53, 162, 235)',
         backgroundColor: 'rgba(53, 162, 235, 0.5)',
         tension: 0.2,
-        borderWidth: isMobile ? 1 : 2,
+        borderWidth: isMobile ? 1.5 : 2,
+        pointRadius: isMobile ? 2 : 3,
       },
       {
         label: 'BP Diastolic',
@@ -278,7 +295,8 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         borderColor: 'rgb(75, 192, 192)',
         backgroundColor: 'rgba(75, 192, 192, 0.5)',
         tension: 0.2,
-        borderWidth: isMobile ? 1 : 2,
+        borderWidth: isMobile ? 1.5 : 2,
+        pointRadius: isMobile ? 2 : 3,
       },
     ],
   };
@@ -292,7 +310,8 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         borderColor: 'rgb(255, 159, 64)',
         backgroundColor: 'rgba(255, 159, 64, 0.5)',
         tension: 0.2,
-        borderWidth: isMobile ? 1 : 2,
+        borderWidth: isMobile ? 1.5 : 2,
+        pointRadius: isMobile ? 2 : 3,
       },
       {
         label: 'SpO₂',
@@ -300,7 +319,8 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         borderColor: 'rgb(153, 102, 255)',
         backgroundColor: 'rgba(153, 102, 255, 0.5)',
         tension: 0.2,
-        borderWidth: isMobile ? 1 : 2,
+        borderWidth: isMobile ? 1.5 : 2,
+        pointRadius: isMobile ? 2 : 3,
       },
       {
         label: 'Temp',
@@ -308,7 +328,8 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         borderColor: 'rgb(255, 205, 86)',
         backgroundColor: 'rgba(255, 205, 86, 0.5)',
         tension: 0.2,
-        borderWidth: isMobile ? 1 : 2,
+        borderWidth: isMobile ? 1.5 : 2,
+        pointRadius: isMobile ? 2 : 3,
       },
     ],
   };
@@ -322,7 +343,6 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
         </CardTitle>
       </CardHeader>
       <CardContent className="p-3 md:p-6 space-y-4 md:space-y-6">
-        {/* Main Vital Signs Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
           <VitalSignBox
             label="Heart Rate"
@@ -356,17 +376,16 @@ export default function VitalSignsMonitor({ latestVitals }: VitalSignsMonitorPro
           />
         </div>
 
-        {/* Charts Section */}
-        <div className="grid md:grid-cols-2 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
             <h3 className="text-xs md:text-sm font-medium text-gray-400">Cardiovascular Trends</h3>
-            <div className="h-[200px] md:h-[250px] bg-black/50 rounded-lg border border-gray-800 p-2 md:p-4">
+            <div className="relative h-[300px] md:h-[300px] bg-black/50 rounded-lg border border-gray-800 p-4">
               <Line options={chartOptions} data={primaryData} />
             </div>
           </div>
           <div className="space-y-2">
             <h3 className="text-xs md:text-sm font-medium text-gray-400">Respiratory & Temperature Trends</h3>
-            <div className="h-[200px] md:h-[250px] bg-black/50 rounded-lg border border-gray-800 p-2 md:p-4">
+            <div className="relative h-[300px] md:h-[300px] bg-black/50 rounded-lg border border-gray-800 p-4">
               <Line options={chartOptions} data={secondaryData} />
             </div>
           </div>
